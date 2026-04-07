@@ -19,6 +19,7 @@ Route::post('setToken', [App\Http\Controllers\Auth\AjaxController::class, 'setTo
 Route::post('setSubcriptionFlag', [App\Http\Controllers\Auth\AjaxController::class, 'setSubcriptionFlag'])->name('setSubcriptionFlag');
 Route::post('send-otp', [App\Http\Controllers\Auth\AjaxController::class, 'sendOtp'])->name('sendOtp');
 Route::post('verify-otp', [App\Http\Controllers\Auth\AjaxController::class, 'verifyOtp'])->name('verifyOtp');
+Route::post('save-vendor-firestore-id', [App\Http\Controllers\Auth\AjaxController::class, 'saveVendorFirestoreId'])->name('saveVendorFirestoreId')->middleware('auth');
 Route::get('register', function () {
     return redirect()->route('register.phone');
 })->name('register');

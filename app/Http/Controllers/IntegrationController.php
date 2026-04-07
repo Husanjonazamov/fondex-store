@@ -26,29 +26,70 @@ class IntegrationController extends Controller
         try {
             $user = Auth::user();
             $vendorUser = VendorUsers::where('user_id', $user->id)->first();
-            
+
             if (!$vendorUser) {
                 return response()->json(['success' => false, 'message' => 'Vendor not found'], 404);
             }
 
-            $data = $request->all();
-            $data['vendor_id'] = $vendorUser->uuid; // Use Firebase ID (uuid)
+            // Firestore vendor ID (vandorId from JS)
+            $vendorFirestoreId = $request->vendorID ?? $vendorUser->firestore_vendor_id ?? '';
 
-            $response = Http::post($this->apiUrl . '/products', $data);
+            $fields = [
+                ['name' => 'vendor',        'contents' => $vendorFirestoreId],
+                ['name' => 'vendor_id',     'contents' => $vendorUser->uuid],
+                ['name' => 'firestore_id',  'contents' => $request->id ?? ''],
+                ['name' => 'name',          'contents' => $request->name ?? ''],
+                ['name' => 'price',         'contents' => (string)($request->price ?? 0)],
+                ['name' => 'discount_price','contents' => (string)($request->disPrice ?? 0)],
+                ['name' => 'quantity',      'contents' => (string)($request->quantity ?? -1)],
+                ['name' => 'description',   'contents' => $request->description ?? ''],
+                ['name' => 'category',      'contents' => $request->categoryID ?? ''],
+                ['name' => 'section',       'contents' => $request->section_id ?? ''],
+                ['name' => 'is_publish',    'contents' => ($request->publish == 'true' || $request->publish == true || $request->publish == 1) ? 'true' : 'false'],
+            ];
 
-            if ($response->successful()) {
-                return response()->json(['success' => true, 'data' => $response->json()]);
+            // Attach uploaded image file directly
+            \Log::info('syncProduct image check', [
+                'hasFile'    => $request->hasFile('image'),
+                'allFiles'   => array_keys($request->allFiles()),
+                'allInput'   => array_keys($request->all()),
+                'contentType'=> $request->header('Content-Type'),
+            ]);
+            if ($request->hasFile('image') && $request->file('image')->isValid()) {
+                $file     = $request->file('image');
+                $tmpPath  = $file->getRealPath();
+                $filename = $file->getClientOriginalName() ?: ('product_' . uniqid() . '.' . $file->getClientOriginalExtension());
+                $mime     = $file->getMimeType() ?: 'image/jpeg';
+
+                $fields[] = [
+                    'name'     => 'image',
+                    'contents' => fopen($tmpPath, 'r'),
+                    'filename' => $filename,
+                    'headers'  => ['Content-Type' => $mime],
+                ];
             }
 
-            return response()->json(['success' => false, 'message' => 'API Error: ' . $response->body()], $response->status());
+            $client = new \GuzzleHttp\Client(['verify' => false]);
+            $guzzleResponse = $client->post($this->apiUrl . '/products/', [
+                'multipart' => $fields,
+            ]);
 
+            $rawBody = $guzzleResponse->getBody()->getContents();
+            \Log::info('syncProduct backend response', ['status' => $guzzleResponse->getStatusCode(), 'body' => $rawBody]);
+            $body = json_decode($rawBody, true);
+
+            return response()->json(['success' => true, 'data' => $body]);
+
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            $body = $e->getResponse()->getBody()->getContents();
+            return response()->json(['success' => false, 'message' => 'API Error: ' . $body], $e->getResponse()->getStatusCode());
         } catch (Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 
     /**
-     * Fetch products from external API
+     * Fetch all products for current vendor from external API (handles pagination)
      */
     public function getProducts(Request $request)
     {
@@ -60,15 +101,70 @@ class IntegrationController extends Controller
                 return response()->json(['success' => false, 'message' => 'Vendor not found'], 404);
             }
 
-            $response = Http::get($this->apiUrl . '/products', [
-                'vendor_id' => $vendorUser->uuid
+            $firestoreVendorId = $vendorUser->firestore_vendor_id ?? '';
+
+            \Log::info('getProducts', [
+                'user_id'             => $user->id,
+                'uuid'                => $vendorUser->uuid,
+                'firestore_vendor_id' => $firestoreVendorId,
             ]);
 
-            if ($response->successful()) {
-                return response()->json($response->json());
+            if (empty($firestoreVendorId)) {
+                return response()->json([
+                    'data'    => ['results' => []],
+                    'results' => [],
+                    'error'   => 'vendor_not_synced',
+                ]);
             }
 
-            return response()->json(['success' => false, 'message' => 'API Error'], $response->status());
+            $allResults = [];
+            $url = $this->apiUrl . '/products/';
+            $params = ['vendor' => $firestoreVendorId, 'limit' => 100];
+
+            // Fetch all pages
+            while ($url) {
+                $response = Http::timeout(15)->get($url, $params);
+                \Log::info('getProducts API call', ['url' => $url, 'status' => $response->status(), 'body_preview' => substr($response->body(), 0, 800)]);
+                if (!$response->successful()) break;
+
+                $json = $response->json();
+                $results = $json['data']['results'] ?? $json['results'] ?? [];
+                $allResults = array_merge($allResults, $results);
+
+                // Next page (cursor-based pagination)
+                $nextUrl = $json['data']['next'] ?? null;
+                if ($nextUrl) {
+                    $url = $nextUrl;
+                    $params = []; // params already in the next URL
+                } else {
+                    $url = null;
+                }
+            }
+
+            // Normalize field names for the frontend
+            $normalized = array_map(function ($item) {
+                return [
+                    'id'          => $item['firestore_id'] ?? ($item['id'] ?? ''),
+                    'backend_id'  => $item['id'] ?? null,
+                    'name'        => $item['name'] ?? '',
+                    'price'       => $item['price'] ?? 0,
+                    'disPrice'    => $item['discount_price'] ?? '0',
+                    'photo'       => $item['image'] ?? '',
+                    'photos'      => $item['images'] ?? [],
+                    'vendorID'    => $item['vendor'] ?? '',
+                    'categoryID'  => $item['category'] ?? '',
+                    'section_id'  => $item['section'] ?? '',
+                    'description' => $item['description'] ?? '',
+                    'publish'     => ($item['is_publish'] ?? false) ? 'Yes' : 'No',
+                    'quantity'    => $item['quantity'] ?? 0,
+                    'createdAt'   => $item['created_at'] ?? null,
+                ];
+            }, $allResults);
+
+            return response()->json([
+                'data'    => ['results' => $normalized],
+                'results' => $normalized,
+            ]);
 
         } catch (Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);

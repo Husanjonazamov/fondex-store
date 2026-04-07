@@ -181,6 +181,19 @@ class AjaxController extends Controller
         return response()->json(['success' => true]);
     }
 
+    public function saveVendorFirestoreId(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['success' => false], 401);
+        }
+        DB::table('vendor_users')
+            ->where('user_id', $user->id)
+            ->update(['firestore_vendor_id' => $request->firestore_vendor_id]);
+
+        return response()->json(['success' => true]);
+    }
+
     public function setSubcriptionFlag(Request $request)
 
     {

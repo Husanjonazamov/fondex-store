@@ -351,15 +351,32 @@
                                         headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
                                         success: function(res) {
                                             if (res.access) {
-                                                if (userData.hasOwnProperty('subscriptionPlanId') && userData.subscriptionPlanId) {
-                                                    window.location = "{{ route('dashboard') }}";
-                                                } else if (subscriptionModel || commissionModel) {
-                                                    window.location = "{{ route('subscription-plan.show') }}";
-                                                } else if (userData.hasOwnProperty('sectionId') && userData.sectionId) {
-                                                    window.location = "{{ route('dashboard') }}";
-                                                } else {
-                                                    window.location = "{{ route('store') }}";
-                                                }
+                                                // Save vendor Firestore ID before redirecting
+                                                database.collection('vendors')
+                                                    .where('author', '==', userData.id)
+                                                    .get().then(function(vendorSnaps) {
+                                                        var firestoreVendorId = '';
+                                                        if (!vendorSnaps.empty) {
+                                                            firestoreVendorId = vendorSnaps.docs[0].data().id || '';
+                                                        }
+                                                        $.ajax({
+                                                            type: 'POST',
+                                                            url: "{{ route('saveVendorFirestoreId') }}",
+                                                            data: { firestore_vendor_id: firestoreVendorId },
+                                                            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                                                            complete: function() {
+                                                                if (userData.hasOwnProperty('subscriptionPlanId') && userData.subscriptionPlanId) {
+                                                                    window.location = "{{ route('dashboard') }}";
+                                                                } else if (subscriptionModel || commissionModel) {
+                                                                    window.location = "{{ route('subscription-plan.show') }}";
+                                                                } else if (userData.hasOwnProperty('sectionId') && userData.sectionId) {
+                                                                    window.location = "{{ route('dashboard') }}";
+                                                                } else {
+                                                                    window.location = "{{ route('store') }}";
+                                                                }
+                                                            }
+                                                        });
+                                                    });
                                             }
                                         }
                                     });

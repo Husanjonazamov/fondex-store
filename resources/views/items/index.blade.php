@@ -163,200 +163,77 @@
             window.location.href = url;
         });
 
-        // Initialize DataTable immediately so it doesn't hang if getVendorId fails
         $(document).ready(function() {
             jQuery("#data-table_processing").show();
 
-            var placeholder = database.collection('settings').doc('placeHolderImage');
-            placeholder.get().then(async function(snapshotsimage) {
-                if (snapshotsimage.exists) {
-                    var placeholderImageData = snapshotsimage.data();
-                    placeholderImage = placeholderImageData.image;
-                }
+            database.collection('settings').doc('placeHolderImage').get().then(function(snap) {
+                if (snap.exists) placeholderImage = snap.data().image;
             });
 
-            getVendorId(vendorUserId).then(data => {
-                vendorId = data;
-                // If the table was already initialized and needs a refresh with new vendorId, 
-                // but since the API uses vendorUserId (UUID), it might work without this.
-                if (table) {
-                    table.ajax.reload();
-                }
-            }).catch(err => {
-                console.warn("Could not load vendorId from Firestore, using PHP ID only.", err);
-            });
+            var fieldConfig = {
+                columns: [
+                    { key: 'name',       header: "{{ trans('lang.item_info') }}" },
+                    { key: 'finalPrice', header: "{{ trans('lang.item_price') }}" },
+                    { key: 'category',   header: "{{ trans('lang.item_category_id') }}" },
+                    { key: 'publish',    header: "{{ trans('lang.item_publish') }}" },
+                ],
+                fileName: "{{ trans('lang.item_table') }}",
+            };
 
-                    var fieldConfig = {
-                        columns: [{
-                                key: 'name',
-                                header: "{{ trans('lang.item_info') }}"
-                            },
-                            {
-                                key: 'finalPrice',
-                                header: "{{ trans('lang.item_price') }}"
-                            },
-                            {
-                                key: 'category',
-                                header: "{{ trans('lang.item_category_id') }}"
-                            },
-                            {
-                                key: 'publish',
-                                header: "{{ trans('lang.item_publish') }}"
-                            },
-                        ],
+            // Fetch all data first, then build DataTable
+            $.ajax({
+                url: '{{ route('items.fetch') }}',
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    console.log('items.fetch OK:', JSON.stringify(response).substring(0, 300));
 
-                        fileName: "{{ trans('lang.item_table') }}",
-                    };
+                    if (response.error === 'vendor_not_synced') {
+                        console.warn('vendor_not_synced, reloading...');
+                        setTimeout(function() { window.location.reload(); }, 2000);
+                        return;
+                    }
 
-                    const table = $('#itemTable').DataTable({
-                            pageLength: 10,
-                            processing: false,
-                            serverSide: true,
-                            responsive: true,
-                            ajax: async function(data, callback, settings) {
-                                const start = data.start;
-                                const length = data.length;
-                                const searchValue = data.search.value.toLowerCase();
-                                const orderColumnIndex = data.order[0].column;
-                                const orderDirection = data.order[0].dir;
-                                const orderableColumns = ['name', 'finalPrice', 'category', '', 'createdDate', '']; // Ensure this matches the actual column names
+                    var items = (response.data && response.data.results) ? response.data.results : (response.results || []);
+                    console.log('Items count:', items.length);
 
-                                const orderByField = orderableColumns[
-                                    orderColumnIndex]; // Adjust the index to match your table
+                    // Build table rows
+                    var rows = [];
+                    items.forEach(function(item) {
+                        var finalPrice = (item.disPrice && item.disPrice != '0') ? item.disPrice : item.price;
+                        var createdAt = '';
+                        if (item.createdAt) {
+                            try {
+                                var d = new Date(item.createdAt);
+                                if (!isNaN(d.getTime())) createdAt = d.toDateString() + ' ' + d.toLocaleTimeString('en-US');
+                            } catch(e) {}
+                        }
+                        item.finalPrice  = parseInt(finalPrice || 0);
+                        item.createdDate = createdAt;
+                        item.publish     = (item.publish === true || item.publish === 'Yes' || item.publish == 1) ? 'Yes' : 'No';
 
-                                if (searchValue.length >= 3 || searchValue.length === 0) {
-                                    $('#data-table_processing').show();
-                                }
+                        var route1 = '{{ route('items.edit', ':id') }}'.replace(':id', item.id);
+                        var img = item.photo
+                            ? '<img class="rounded" style="width:50px" src="' + item.photo + '" onerror="this.src=\'' + placeholderImage + '\'">'
+                            : '<img class="rounded" style="width:50px" src="' + placeholderImage + '">';
+                        var nameCol   = img + '<a href="' + route1 + '" class="left_space redirecttopage" data-url="' + route1 + '">' + (item.name || '') + '</a>';
+                        var priceCol  = finalPrice || 0;
+                        var catCol    = '<span class="category_' + (item.categoryID||'') + '">' + (item.category || item.categoryID || '') + '</span>';
+                        var pubCol    = item.publish === 'Yes' ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>';
+                        var actCol    = '<span class="action-btn"><a href="' + route1 + '"><i class="mdi mdi-lead-pencil"></i></a><a id="' + item.id + '" name="item-delete" href="javascript:void(0)"><i class="mdi mdi-delete"></i></a></span>';
 
-                                $.getJSON('{{ route('items.fetch') }}', async function(response) {
-                                    console.log("API Response received:", response);
-                                    try {
-                                        let rawResults = (response.data && response.data.results) ? response.data.results : (response.results || []);
-                                        console.log("Raw items count:", rawResults.length);
-                                        
-                                        // Filter items for CURRENT vendor only
-                                        let querySnapshot = rawResults.filter(item => {
-                                            return (item.vendorID == vendorUserId || item.vendor_id == vendorUserId || item.vendorID == vendorId || item.vendor_id == vendorId);
-                                        });
-                                        console.log("Filtered items for vendor " + vendorUserId + ":", querySnapshot.length);
+                        rows.push([nameCol, priceCol, catCol, pubCol, createdAt, actCol]);
+                    });
 
-                                        if (!querySnapshot || querySnapshot.length === 0) {
-                                            $('.total_count').text(0);
-                                            $('#data-table_processing').hide();
-                                            callback({ draw: data.draw, recordsTotal: 0, recordsFiltered: 0, data: [] });
-                                            return;
-                                        }
+                    $('.total_count').text(rows.length);
+                    jQuery("#data-table_processing").hide();
 
-                                        // Try to fetch categories once, but don't hang for too long
-                                        let categoriesMap = {};
-                                        try {
-                                            console.log("Fetching categories from Firestore...");
-                                            const catSnapshot = await Promise.race([
-                                                database.collection('vendor_categories').get(),
-                                                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
-                                            ]);
-                                            catSnapshot.forEach(doc => {
-                                                const catData = doc.data();
-                                                categoriesMap[catData.id] = catData.title;
-                                            });
-                                            console.log("Categories loaded:", Object.keys(categoriesMap).length);
-                                        } catch (catErr) {
-                                            console.warn("Failed to load categories from Firestore, proceeding without them:", catErr);
-                                        }
-
-                                        let filteredRecords = [];
-                                        
-                                        for (const childData of querySnapshot) {
-                                            var finalPrice = childData.disPrice && childData.disPrice != '0' ? childData.disPrice : childData.price;
-                                            
-                                            var date = '';
-                                            var time = '';
-                                            if (childData.createdAt) {
-                                                try {
-                                                    let dateObj = (childData.createdAt && childData.createdAt.toDate) ? childData.createdAt.toDate() : new Date(childData.createdAt);
-                                                    if (!isNaN(dateObj.getTime())) {
-                                                        date = dateObj.toDateString();
-                                                        time = dateObj.toLocaleTimeString('en-US');
-                                                    }
-                                                } catch (err) { }
-                                            }
-                                            
-                                            var createdAt = date + ' ' + time;
-                                            childData.createdDate = createdAt;
-                                            childData.foodName = childData.name;
-                                            childData.finalPrice = parseInt(finalPrice || 0);
-
-                                            childData.category = categoriesMap[childData.categoryID] || (childData.category || '{{ trans('lang.unknown') }}');
-                                            childData.id = childData.id || childData._id; // Ensure ID exists
-                                            childData.publish = (childData.publish === true || childData.publish === 'Yes' || childData.publish === 'yes' || childData.publish == 1) ? 'Yes' : 'No';
-
-                                            if (!searchValue || 
-                                                (childData.name && childData.name.toString().toLowerCase().includes(searchValue)) ||
-                                                (childData.finalPrice && childData.finalPrice.toString().includes(searchValue)) ||
-                                                (childData.category && childData.category.toString().toLowerCase().includes(searchValue)) ||
-                                                (childData.publish && childData.publish.toString().toLowerCase().includes(searchValue)) ||
-                                                (createdAt && createdAt.toString().toLowerCase().includes(searchValue))
-                                            ) {
-                                                filteredRecords.push(childData);
-                                            }
-                                        }
-
-                                        filteredRecords.sort((a, b) => {
-                                            let aValue = a[orderByField];
-                                            let bValue = b[orderByField];
-
-                                            if (orderByField === 'finalPrice') {
-                                                aValue = parseFloat(a[orderByField] || 0);
-                                                bValue = parseFloat(b[orderByField] || 0);
-                                            } else if (orderByField === 'createdDate') {
-                                                aValue = a[orderByField] ? new Date(a[orderByField]).getTime() : 0;
-                                                bValue = b[orderByField] ? new Date(b[orderByField]).getTime() : 0;
-                                            } else {
-                                                aValue = (a[orderByField] || '').toString().toLowerCase();
-                                                bValue = (b[orderByField] || '').toString().toLowerCase();
-                                            }
-
-                                            return orderDirection === 'asc' ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1 : -1);
-                                        });
-
-                                        const totalRecords = filteredRecords.length;
-                                        $('.total_count').text(totalRecords);
-                                        const paginatedRecords = filteredRecords.slice(start, start + length);
-
-                                        let records = [];
-                                        await Promise.all(paginatedRecords.map(async (childData) => {
-                                            records.push(await buildHTML(childData));
-                                        }));
-
-                                        $('#data-table_processing').hide();
-                                        callback({
-                                            draw: data.draw,
-                                            recordsTotal: totalRecords,
-                                            recordsFiltered: totalRecords,
-                                            data: records
-                                        });
-
-                                    } catch (error) {
-                                        console.error("Error processing items:", error);
-                                        $('#data-table_processing').hide();
-                                        callback({
-                                            draw: data.draw,
-                                            recordsTotal: 0,
-                                            recordsFiltered: 0,
-                                            data: []
-                                        });
-                                    }
-                                }).fail(function(error) {
-                                    console.error("Error fetching items:", error);
-                                    $('#data-table_processing').hide();
-                                    callback({
-                                        draw: data.draw,
-                                        recordsTotal: 0,
-                                        recordsFiltered: 0,
-                                        data: []
-                                    });
-                                });
-                        },
+                    $('#itemTable').DataTable({
+                        pageLength: 10,
+                        processing: false,
+                        serverSide: false,
+                        responsive: true,
+                        data: rows,
                         columnDefs: [{
                             orderable: false,
                             targets: [0, 3, 5]
@@ -404,6 +281,11 @@
                             }).remove();
                         }
                     });
+                },
+                error: function(xhr, status, err) {
+                    console.error('items.fetch FAILED:', status, err, xhr.responseText);
+                    jQuery("#data-table_processing").hide();
+                }
             });
         })
 
@@ -476,7 +358,7 @@
         $(document).on("click", "a[name='item-delete']", async function(e) {
             const id = this.id;
             await deleteDocumentWithImage('vendor_products', id, 'photo', 'photos');
-            window.location = "{{ !url()->current() }}";
+            window.location = "{{ url()->current() }}";
         });
 
         async function getVendorId(vendorUser) {

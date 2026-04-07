@@ -319,6 +319,7 @@
         var variantImageToDelete = [];
         var variant_vIds = [];
         var productImagesCount = 0;
+        var productImageFile = null;
         var photo = "";
         var addOnesTitle = [];
         var addOnesPrice = [];
@@ -845,6 +846,7 @@
                                 'categoryID': category,
                                 'brandID': brand,
                                 'photo': photo,
+                                'photo_base64': photos.length > 0 ? photos[0] : '',
                                 'photos': IMG,
                                 'calories': itemCalories,
                                 "grams": itemGrams,
@@ -863,36 +865,31 @@
                                 'isDigitalProduct': is_digital_product,
                                 'digitalProduct': DigitalImg ? DigitalImg : '',
                             }).then(function(result) {
+                                var fd = new FormData();
+                                fd.append('name', name);
+                                fd.append('price', price);
+                                fd.append('quantity', parseInt(item_quantity));
+                                fd.append('disPrice', discount);
+                                fd.append('categoryID', category);
+                                fd.append('brandID', brand);
+                                fd.append('photo', photo);
+                                fd.append('description', description);
+                                fd.append('publish', itemPublish);
+                                fd.append('section_id', section_id);
+                                fd.append('id', productId);
+                                fd.append('vendorID', vendorID);
+                                if (productImageFile) {
+                                    fd.append('image', productImageFile, productImageFile.name);
+                                }
                                 $.ajax({
                                     url: '{{ route('items.sync') }}',
                                     type: 'POST',
-                                    data: {
-                                        'name': name,
-                                        'price': price,
-                                        'quantity': parseInt(item_quantity),
-                                        'disPrice': discount,
-                                        'categoryID': category,
-                                        'brandID': brand,
-                                        'photo': photo,
-                                        'photos': IMG,
-                                        'calories': itemCalories,
-                                        'grams': itemGrams,
-                                        'proteins': itemProteins,
-                                        'fats': itemFats,
-                                        'description': description,
-                                        'publish': itemPublish,
-                                        'section_id': section_id,
-                                        'nonveg': nonveg,
-                                        'veg': veg,
-                                        'addOnsTitle': addOnesTitle,
-                                        'addOnsPrice': addOnesPrice,
-                                        'takeawayOption': itemTakeaway,
-                                        'id': productId,
-                                        'item_attribute': item_attribute,
-                                        'product_specification': product_specification,
-                                        'isDigitalProduct': is_digital_product,
-                                        'digitalProduct': DigitalImg ? DigitalImg : '',
+                                    headers: {
+                                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
                                     },
+                                    data: fd,
+                                    processData: false,
+                                    contentType: false,
                                     success: function(response) {
                                         if (response.success) {
                                             window.location.href = '{{ route('items') }}';
@@ -938,6 +935,7 @@
 
         function handleFileSelectProduct(evt) {
             var f = evt.target.files[0];
+            productImageFile = f;
             var reader = new FileReader();
             reader.onload = (function(theFile) {
                 return function(e) {

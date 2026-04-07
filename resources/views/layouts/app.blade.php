@@ -287,9 +287,14 @@
         </style>
         <?php } ?>
 
-        <?php $id = Auth::user()->getvendorId(); ?>
+        <?php
+            $id = Auth::user()->getvendorId();
+            $vendorUserRow = \App\Models\VendorUsers::where('user_id', Auth::user()->id)->first();
+            $firestoreVendorIdSaved = $vendorUserRow ? ($vendorUserRow->firestore_vendor_id ?? '') : '';
+        ?>
         <script type="text/javascript">
             var cuser_id = '<?php echo $id; ?>';
+            var _firestoreVendorIdSaved = '<?php echo $firestoreVendorIdSaved; ?>';
         </script>
 
     </head>
@@ -1020,6 +1025,36 @@
                 }
             }
         </script>
+
+        {{-- Auto-save vendor Firestore ID if not yet saved --}}
+        @if(empty($firestoreVendorIdSaved))
+        <script>
+        $(document).ready(function() {
+            var db = firebase.firestore();
+            console.log('[AutoSync] cuser_id:', cuser_id);
+            db.collection('vendors').where('author', '==', cuser_id).get().then(function(snaps) {
+                console.log('[AutoSync] vendors found:', snaps.size);
+                if (!snaps.empty) {
+                    var firestoreVendorId = snaps.docs[0].data().id || '';
+                    console.log('[AutoSync] firestoreVendorId:', firestoreVendorId);
+                    if (firestoreVendorId) {
+                        $.ajax({
+                            type: 'POST',
+                            url: '{{ route("saveVendorFirestoreId") }}',
+                            data: { firestore_vendor_id: firestoreVendorId },
+                            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                            success: function(r) { console.log('[AutoSync] saved OK:', r); },
+                            error: function(xhr) { console.error('[AutoSync] save failed:', xhr.responseText); }
+                        });
+                    }
+                } else {
+                    console.warn('[AutoSync] No vendor found for cuser_id:', cuser_id);
+                }
+            }).catch(function(e) { console.error('[AutoSync] Firestore error:', e); });
+        });
+        </script>
+        @endif
+
     </body>
 
 </html>

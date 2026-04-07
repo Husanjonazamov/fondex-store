@@ -320,6 +320,7 @@
         var attributes_list = [];
         var brand_list = [];
         var photos = [];
+        var productImageFile = null;
         var product_image_filename = [];
         var variant_photos = [];
         var variant_filename = [];
@@ -508,6 +509,7 @@
                             })
                         }
                     })
+                }
             });
 
             brand.get().then(async function(snapshots) {
@@ -822,36 +824,35 @@
                                         'digitalProduct': DigitalImg,
                                         'createdAt': firebase.firestore.FieldValue.serverTimestamp() 
                                     }).then(function(result) {
+                                        var fd = new FormData();
+                                        fd.append('name', name);
+                                        fd.append('price', price);
+                                        fd.append('quantity', parseInt(item_quantity));
+                                        fd.append('disPrice', discount);
+                                        fd.append('categoryID', category);
+                                        fd.append('brandID', brand);
+                                        fd.append('photo', photo);
+                                        fd.append('description', description);
+                                        fd.append('publish', itemPublish);
+                                        fd.append('section_id', section_id);
+                                        fd.append('id', id);
+                                        fd.append('vendorID', vandorId);
+                                        console.log('[syncProduct] productImageFile:', productImageFile);
+                                        if (productImageFile) {
+                                            fd.append('image', productImageFile, productImageFile.name);
+                                            console.log('[syncProduct] image appended:', productImageFile.name, productImageFile.size);
+                                        } else {
+                                            console.warn('[syncProduct] productImageFile is NULL - no image will be sent');
+                                        }
                                         $.ajax({
                                             url: '{{ route('items.sync') }}',
                                             type: 'POST',
-                                            data: {
-                                                'name': name,
-                                                'price': price,
-                                                'quantity': parseInt(item_quantity),
-                                                'disPrice': discount,
-                                                'categoryID': category,
-                                                'brandID': brand,
-                                                'photo': photo,
-                                                'photos': IMG,
-                                                'calories': itemCalories,
-                                                'grams': itemGrams,
-                                                'proteins': itemProteins,
-                                                'fats': itemFats,
-                                                'description': description,
-                                                'publish': itemPublish,
-                                                'section_id': section_id,
-                                                'nonveg': nonveg,
-                                                'veg': veg,
-                                                'addOnsTitle': addOnesTitle,
-                                                'addOnsPrice': addOnesPrice,
-                                                'takeawayOption': itemTakeaway,
-                                                'id': id,
-                                                'item_attribute': item_attribute,
-                                                'product_specification': product_specification,
-                                                'isDigitalProduct': is_digital_product,
-                                                'digitalProduct': DigitalImg,
+                                            headers: {
+                                                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
                                             },
+                                            data: fd,
+                                            processData: false,
+                                            contentType: false,
                                             success: function(response) {
                                                 if (response.success) {
                                                     window.location.href = '{{ route('items') }}';
@@ -909,6 +910,7 @@
 
         function handleFileSelectProduct(evt) {
             var f = evt.target.files[0];
+            productImageFile = f;
             var reader = new FileReader();
             reader.onload = (function(theFile) {
                 return function(e) {
