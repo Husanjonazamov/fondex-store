@@ -147,31 +147,44 @@
         fetchSectionId();
 
         activeCurrencyref.get().then(async function(currencySnapshots) {
-            currencySnapshotsdata = currencySnapshots.docs[0].data();
-            activeCurrency = currencySnapshotsdata.symbol;
-            currencyAtRight = currencySnapshotsdata.symbolAtRight;
+            if (!currencySnapshots.empty) {
+                currencySnapshotsdata = currencySnapshots.docs[0].data();
+                activeCurrency = currencySnapshotsdata.symbol;
+                currencyAtRight = currencySnapshotsdata.symbolAtRight;
 
-            if (currencySnapshotsdata.decimal_degits) {
-                decimal_degits = currencySnapshotsdata.decimal_degits;
+                if (currencySnapshotsdata.decimal_degits) {
+                    decimal_degits = currencySnapshotsdata.decimal_degits;
+                }
             }
-        })
-        getVendorId(vendorUserId).then(data => {
-            vendorId = data;
-            ref = database.collection('vendor_products').where('vendorID', "==", vendorId);
-            $(document).ready(function() {
+        });
 
-                    $(document.body).on('click', '.redirecttopage', function() {
-                        var url = $(this).attr('data-url');
-                        window.location.href = url;
-                    });
+        $(document.body).on('click', '.redirecttopage', function() {
+            var url = $(this).attr('data-url');
+            window.location.href = url;
+        });
 
-                    jQuery("#data-table_processing").show();
+        // Initialize DataTable immediately so it doesn't hang if getVendorId fails
+        $(document).ready(function() {
+            jQuery("#data-table_processing").show();
 
-                    var placeholder = database.collection('settings').doc('placeHolderImage');
-                    placeholder.get().then(async function(snapshotsimage) {
-                        var placeholderImageData = snapshotsimage.data();
-                        placeholderImage = placeholderImageData.image;
-                    })
+            var placeholder = database.collection('settings').doc('placeHolderImage');
+            placeholder.get().then(async function(snapshotsimage) {
+                if (snapshotsimage.exists) {
+                    var placeholderImageData = snapshotsimage.data();
+                    placeholderImage = placeholderImageData.image;
+                }
+            });
+
+            getVendorId(vendorUserId).then(data => {
+                vendorId = data;
+                // If the table was already initialized and needs a refresh with new vendorId, 
+                // but since the API uses vendorUserId (UUID), it might work without this.
+                if (table) {
+                    table.ajax.reload();
+                }
+            }).catch(err => {
+                console.warn("Could not load vendorId from Firestore, using PHP ID only.", err);
+            });
 
                     var fieldConfig = {
                         columns: [{
@@ -196,9 +209,9 @@
                     };
 
                     const table = $('#itemTable').DataTable({
-                            pageLength: 10, // Number of rows per page
-                            processing: false, // Show processing indicator
-                            serverSide: true, // Enable server-side processing
+                            pageLength: 10,
+                            processing: false,
+                            serverSide: true,
                             responsive: true,
                             ajax: async function(data, callback, settings) {
                                 const start = data.start;
@@ -215,148 +228,134 @@
                                     $('#data-table_processing').show();
                                 }
 
-                                await ref.get().then(async function(querySnapshot) {
-                                        if (querySnapshot.empty) {
+                                $.getJSON('{{ route('items.fetch') }}', async function(response) {
+                                    console.log("API Response received:", response);
+                                    try {
+                                        let rawResults = (response.data && response.data.results) ? response.data.results : (response.results || []);
+                                        console.log("Raw items count:", rawResults.length);
+                                        
+                                        // Filter items for CURRENT vendor only
+                                        let querySnapshot = rawResults.filter(item => {
+                                            return (item.vendorID == vendorUserId || item.vendor_id == vendorUserId || item.vendorID == vendorId || item.vendor_id == vendorId);
+                                        });
+                                        console.log("Filtered items for vendor " + vendorUserId + ":", querySnapshot.length);
+
+                                        if (!querySnapshot || querySnapshot.length === 0) {
                                             $('.total_count').text(0);
-                                            $('#data-table_processing').hide(); // Hide loader
-                                            callback({
-                                                draw: data.draw,
-                                                recordsTotal: 0,
-                                                recordsFiltered: 0,
-                                                data: [] // No data
-                                            });
+                                            $('#data-table_processing').hide();
+                                            callback({ draw: data.draw, recordsTotal: 0, recordsFiltered: 0, data: [] });
                                             return;
                                         }
 
-                                        let records = [];
-                                        let filteredRecords = [];
+                                        // Try to fetch categories once, but don't hang for too long
+                                        let categoriesMap = {};
+                                        try {
+                                            console.log("Fetching categories from Firestore...");
+                                            const catSnapshot = await Promise.race([
+                                                database.collection('vendor_categories').get(),
+                                                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+                                            ]);
+                                            catSnapshot.forEach(doc => {
+                                                const catData = doc.data();
+                                                categoriesMap[catData.id] = catData.title;
+                                            });
+                                            console.log("Categories loaded:", Object.keys(categoriesMap).length);
+                                        } catch (catErr) {
+                                            console.warn("Failed to load categories from Firestore, proceeding without them:", catErr);
+                                        }
 
-                                        await Promise.all(querySnapshot.docs.map(async (
-                                                doc) => {
-                                                let childData = doc.data();
-                                                childData.id = doc
-                                                    .id; // Ensure the document ID is included in the data
-                                                var finalPrice = 0;
-                                                if (childData.hasOwnProperty(
-                                                        'disPrice') && childData
-                                                    .disPrice != '' && childData
-                                                    .disPrice != '0') {
-                                                    finalPrice = childData.disPrice;
-                                                } else {
-                                                    finalPrice = childData.price;
-                                                }
-                                                if (childData.hasOwnProperty("createdAt") && childData.createdAt != '' && childData.createdAt != null) {
-                                                    try {
-                                                        date = childData.createdAt.toDate().toDateString();
-                                                        time = childData.createdAt.toDate()
-                                                            .toLocaleTimeString('en-US');
-                                                    } catch (err) {}
-                                                }
-                                                var createdAt = date + ' ' + time;
-                                                childData.createdDate=createdAt;
-                                                childData.foodName = childData.name;
-                                                childData.finalPrice = parseInt(
-                                                    finalPrice);
-                                                var category =
-                                                    await productCategory(childData
-                                                        .categoryID);
-                                                if (category == '') {
-                                                    category =
-                                                        '{{ trans('lang.unknown') }}';
-                                                }
-                                                childData.category = category;
-                                                childData.publish = childData
-                                                    .publish ? 'Yes' : 'No';
-                                                if (searchValue) {
-                                                    if (
-                                                        (childData.name && childData
-                                                            .name.toString()
-                                                            .toLowerCase().includes(
-                                                                searchValue)) ||
-                                                        (childData.finalPrice &&
-                                                            childData.finalPrice
-                                                            .toString().includes(
-                                                                searchValue)) ||
-                                                        (childData.category &&
-                                                            childData.category
-                                                            .toString()
-                                                            .toLowerCase().includes(
-                                                                searchValue)) || (
-                                                            childData.publish &&
-                                                            childData.publish
-                                                            .toString()
-                                                            .toLowerCase().includes(
-                                                                searchValue)) ||
-                                                        (createdAt && createdAt.toString().toLowerCase()
-                                                            .indexOf(searchValue) > -1)
-                                                ) {
-                                                    filteredRecords.push(
-                                                        childData);
-                                                }
-                                            } else {
+                                        let filteredRecords = [];
+                                        
+                                        for (const childData of querySnapshot) {
+                                            var finalPrice = childData.disPrice && childData.disPrice != '0' ? childData.disPrice : childData.price;
+                                            
+                                            var date = '';
+                                            var time = '';
+                                            if (childData.createdAt) {
+                                                try {
+                                                    let dateObj = (childData.createdAt && childData.createdAt.toDate) ? childData.createdAt.toDate() : new Date(childData.createdAt);
+                                                    if (!isNaN(dateObj.getTime())) {
+                                                        date = dateObj.toDateString();
+                                                        time = dateObj.toLocaleTimeString('en-US');
+                                                    }
+                                                } catch (err) { }
+                                            }
+                                            
+                                            var createdAt = date + ' ' + time;
+                                            childData.createdDate = createdAt;
+                                            childData.foodName = childData.name;
+                                            childData.finalPrice = parseInt(finalPrice || 0);
+
+                                            childData.category = categoriesMap[childData.categoryID] || (childData.category || '{{ trans('lang.unknown') }}');
+                                            childData.id = childData.id || childData._id; // Ensure ID exists
+                                            childData.publish = (childData.publish === true || childData.publish === 'Yes' || childData.publish === 'yes' || childData.publish == 1) ? 'Yes' : 'No';
+
+                                            if (!searchValue || 
+                                                (childData.name && childData.name.toString().toLowerCase().includes(searchValue)) ||
+                                                (childData.finalPrice && childData.finalPrice.toString().includes(searchValue)) ||
+                                                (childData.category && childData.category.toString().toLowerCase().includes(searchValue)) ||
+                                                (childData.publish && childData.publish.toString().toLowerCase().includes(searchValue)) ||
+                                                (createdAt && createdAt.toString().toLowerCase().includes(searchValue))
+                                            ) {
                                                 filteredRecords.push(childData);
                                             }
+                                        }
+
+                                        filteredRecords.sort((a, b) => {
+                                            let aValue = a[orderByField];
+                                            let bValue = b[orderByField];
+
+                                            if (orderByField === 'finalPrice') {
+                                                aValue = parseFloat(a[orderByField] || 0);
+                                                bValue = parseFloat(b[orderByField] || 0);
+                                            } else if (orderByField === 'createdDate') {
+                                                aValue = a[orderByField] ? new Date(a[orderByField]).getTime() : 0;
+                                                bValue = b[orderByField] ? new Date(b[orderByField]).getTime() : 0;
+                                            } else {
+                                                aValue = (a[orderByField] || '').toString().toLowerCase();
+                                                bValue = (b[orderByField] || '').toString().toLowerCase();
+                                            }
+
+                                            return orderDirection === 'asc' ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1 : -1);
+                                        });
+
+                                        const totalRecords = filteredRecords.length;
+                                        $('.total_count').text(totalRecords);
+                                        const paginatedRecords = filteredRecords.slice(start, start + length);
+
+                                        let records = [];
+                                        await Promise.all(paginatedRecords.map(async (childData) => {
+                                            records.push(await buildHTML(childData));
                                         }));
 
-                                    filteredRecords.sort((a, b) => {
-                                        let aValue = a[orderByField];
-                                        let bValue = b[orderByField];
+                                        $('#data-table_processing').hide();
+                                        callback({
+                                            draw: data.draw,
+                                            recordsTotal: totalRecords,
+                                            recordsFiltered: totalRecords,
+                                            data: records
+                                        });
 
-                                        if (orderByField === 'finalPrice') {
-                                            aValue = a[orderByField] ? parseFloat(a[
-                                                orderByField]) : 0.0;
-                                            bValue = b[orderByField] ? parseFloat(b[
-                                                orderByField]) : 0.0;
-                                        }else if (orderByField === 'createdDate' && a[orderByField] != '' && b[orderByField] != '' && a[orderByField] != null && b[orderByField] != null) {
-                                            aValue = a[orderByField] ? new Date(a[orderByField]).getTime() : 0;
-                                            bValue = b[orderByField] ? new Date(b[orderByField]).getTime() : 0;
-                                        }  else {
-                                            aValue = a[orderByField] ? a[
-                                                    orderByField].toString()
-                                                .toLowerCase() : '';
-                                            bValue = b[orderByField] ? b[
-                                                    orderByField].toString()
-                                                .toLowerCase() : ''
-                                        }
-
-                                        if (orderDirection === 'asc') {
-                                            return (aValue > bValue) ? 1 : -1;
-                                        } else {
-                                            return (aValue < bValue) ? 1 : -1;
-                                        }
-
-                                    });
-
-                                    const totalRecords = filteredRecords.length; $('.total_count').text(totalRecords);
-                                    const paginatedRecords = filteredRecords.slice(start,
-                                        start + length);
-
-                                    await Promise.all(paginatedRecords.map(async (
-                                        childData) => {
-                                        var getData = await buildHTML(
-                                            childData);
-
-                                        records.push(getData);
-                                    }));
-
-                                    $('#data-table_processing').hide(); // Hide loader
+                                    } catch (error) {
+                                        console.error("Error processing items:", error);
+                                        $('#data-table_processing').hide();
+                                        callback({
+                                            draw: data.draw,
+                                            recordsTotal: 0,
+                                            recordsFiltered: 0,
+                                            data: []
+                                        });
+                                    }
+                                }).fail(function(error) {
+                                    console.error("Error fetching items:", error);
+                                    $('#data-table_processing').hide();
                                     callback({
                                         draw: data.draw,
-                                        recordsTotal: totalRecords, // Total number of records in Firestore
-                                        recordsFiltered: totalRecords, // Number of records after filtering (if any)
-                                        filteredData: filteredRecords,
-                                        data: records // The actual data to display in the table
+                                        recordsTotal: 0,
+                                        recordsFiltered: 0,
+                                        data: []
                                     });
-                                }).catch(function(error) {
-                                console.error("Error fetching data from Firestore:", error);
-                                $('#data-table_processing').hide(); // Hide loader
-                                callback({
-                                    draw: data.draw,
-                                    recordsTotal: 0,
-                                    recordsFiltered: 0,
-                                    data: [] // No data due to error
                                 });
-                            });
                         },
                         columnDefs: [{
                             orderable: false,
@@ -481,26 +480,28 @@
         });
 
         async function getVendorId(vendorUser) {
-            var vendorId = '';
-            var ref;
-            await database.collection('vendors').where('author', "==", vendorUser).get().then(async function(
-                vendorSnapshots) {
-                var vendorData = vendorSnapshots.docs[0].data();
-                vendorId = vendorData.id;
-                if (subscriptionModel || commissionModel) {
-                    if (vendorData.hasOwnProperty('subscription_plan') && vendorData.subscription_plan != null && vendorData.subscription_plan != '') {
-                        itemLimit = vendorData.subscription_plan.itemLimit;
-                        if (itemLimit != '-1') {
-                            $('.food-limit-note').html(
-                                '{{ trans('lang.note') }} : {{ trans('lang.your_item_limit_is') }} ' +
-                                itemLimit + ' {{ trans('lang.so_only_first') }} ' + itemLimit +
-                                ' {{ trans('lang.items_will_visible_to_customer') }}')
+            var vId = '';
+            try {
+                const vendorSnapshots = await database.collection('vendors').where('author', "==", vendorUser).get();
+                if (!vendorSnapshots.empty) {
+                    var vendorData = vendorSnapshots.docs[0].data();
+                    vId = vendorData.id;
+                    if (subscriptionModel || commissionModel) {
+                        if (vendorData.hasOwnProperty('subscription_plan') && vendorData.subscription_plan != null && vendorData.subscription_plan != '') {
+                            itemLimit = vendorData.subscription_plan.itemLimit;
+                            if (itemLimit != '-1') {
+                                $('.food-limit-note').html(
+                                    '{{ trans('lang.note') }} : {{ trans('lang.your_item_limit_is') }} ' +
+                                    itemLimit + ' {{ trans('lang.so_only_first') }} ' + itemLimit +
+                                    ' {{ trans('lang.items_will_visible_to_customer') }}')
+                            }
                         }
                     }
                 }
-            })
-
-            return vendorId;
+            } catch (error) {
+                console.error("Error in getVendorId:", error);
+            }
+            return vId;
         }
     </script>
 @endsection

@@ -153,90 +153,8 @@
                             @endforeach
                         @endif
 
-                        <form class="form-horizontal form-material" name="login" id="login-box" action="#">
-                            @csrf
-                            <div class="box-title m-b-20">{{ __('Login') }}</div>
-                            <div class="form-group ">
-                                <div class="col-xs-12">
-                                    <input class="form-control" placeholder="{{ __('Email Address') }}" id="email"
-                                        type="email" class="form-control @error('email') is-invalid @enderror"
-                                        name="email" value="{{ old('email') }}" required autocomplete="email"
-                                        autofocus>
-                                </div>
-                                <div class="error email_error"></div>
-
-                                @error('email')
-                                    <span class="invalid-feedback" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                            <div class="form-group">
-                                <div class="col-xs-12">
-                                    <input id="password" placeholder="{{ __('Password') }}" type="password"
-                                        class="form-control @error('password') is-invalid @enderror" name="password"
-                                        required autocomplete="current-password">
-                                </div>
-                                <div class="error password_error"></div>
-
-                                @error('password')
-                                    <span class="invalid-feedback" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                                <div class="error" id="password_required"></div>
-                            </div>
-                            <div class="forgot-password">
-                                <p><a href="{{ url('forgot-password') }}" class="standard-link"
-                                        target="_blank">{{ trans('lang.forgot_password') }}?</a></p>
-                            </div>
-
-
-                           
-
-                            <div class="form-group text-center m-t-20">
-
-
-                                <div class="col-xs-12">
-                                    <button type="button" onclick="loginClick()" id="login_btn"
-                                        class="btn btn-dark btn-lg btn-block text-uppercase waves-effect waves-light btn btn-primary">
-                                        {{ __('Login') }}
-                                    </button>
-
-                                    <button type="button" onclick="loginWithPhoneClick()" id="loginphon_btn"
-                                        class="btn btn-dark btn-lg btn-block text-uppercase waves-effect waves-light btn btn-primary">
-                                        {{ __('Login') }} With Phone
-                                    </button>
-                                    <button type="button" onclick="googleAuth()"
-                                        class="btn btn-dark btn-lg btn-block text-uppercase waves-effect waves-light btn btn-primary">
-
-                                        <i class="fa fa-google"> </i> Continue with Google
-
-                                    </button>
-
-                                    <div class="or-line mb-4 ">
-                                        <span>OR</span>
-                                    </div>
-                                    <a href="{{ route('register') }}" id="signup_btn"
-                                        class="btn btn-dark btn-lg btn-block text-uppercase waves-effect waves-light btn btn-primary">
-                                        {{ trans('lang.sign_up') }}
-                                    </a>
-                                    <a href="{{ route('register.phone') }}"
-                                        class="btn btn-dark btn-lg btn-block text-uppercase waves-effect waves-light btn btn-primary"
-                                        id="btn-signup-phone">
-
-                                        <i class="fa fa-phone"> </i> {{ trans('lang.signup_with_phone') }}
-
-                                    </a>
-
-
-
-                                </div>
-                            </div>
-                        </form>
-
                         <form class="form-horizontal form-material" name="loginwithphon" id="login-with-phone-box"
-                            action="#" style="display:none;">
+                            action="#">
                             @csrf
                             <div class="box-title m-b-20">{{ __('Login') }}</div>
                             <div class="form-group " id="phone-box">
@@ -273,17 +191,19 @@
                                         class="btn btn-dark btn-lg btn-block text-uppercase waves-effect waves-light btn btn-primary">
                                         OTP Verify
                                     </button>
-                                    <button type="button" style="display:none;" onclick="sendOTP()"
+                                    <button type="button" onclick="sendOTP()"
                                         id="sendotp_btn"
                                         class="btn btn-dark btn-lg btn-block text-uppercase waves-effect waves-light btn btn-primary">
                                         Send OTP
                                     </button>
-                                    <button type="button" onclick="loginBackClick()"
-                                        class="btn btn-dark btn-lg btn-block text-uppercase waves-effect waves-light btn btn-primary">
-                                        {{ __('Login') }} With Email
-                                    </button>
                                     <div class="error" id="password_required_new"></div>
-
+                                    <div class="or-line mb-4 mt-3">
+                                        <span>OR</span>
+                                    </div>
+                                    <a href="{{ route('register.phone') }}"
+                                        class="btn btn-dark btn-lg btn-block text-uppercase waves-effect waves-light btn btn-primary">
+                                        <i class="fa fa-phone"> </i> {{ trans('lang.signup_with_phone') }}
+                                    </a>
                                 </div>
                             </div>
                         </form>
@@ -329,273 +249,133 @@
             
             var commissionModel = false;
 
-            function loginClick() {
-
-                var email = $("#email").val();
-                var password = $("#password").val();
-                $(".email_error").hide();
-
-                $(".password_error").hide();
-                if(email=='') {
-
-                    $(".email_error").show();
-
-                    $(".email_error").html("");
-
-                    $(".email_error").append("<p>{{ trans('lang.enter_owners_email') }}</p>");
-
-                    window.scrollTo(0,0);
-
-                    return;
-
-                } else if(password=='') {
-
-                    $(".password_error").show();
-
-                    $(".password_error").html("");
-
-                    $(".password_error").append("<p>{{ trans('lang.enter_owners_password_error') }}</p>");
-
-                    window.scrollTo(0,0);
-
-                    return;
-
-                }
-                firebase.auth().signInWithEmailAndPassword(email, password).then(function(result) {
-                        // var userEmail = result.user.email;
-                        var userEmail = result.user.email.toLowerCase().trim(); // Convert email to lowercase newly added
-                        console.log("User Email: ", userEmail);
-                        database.collection("users").where("email", "==", userEmail).get().then(async function(snapshots) {
-                            var userData = snapshots.docs[0].data();
-                            if (userData.active == true) {
-                                if (userData.role == "vendor") {
-                                    if (userData.hasOwnProperty('sectionId') && userData.sectionId != null && userData.sectionId != '') {
-                                        await database.collection('sections').where('id', '==', userData.sectionId).get().then(async function(snapshots) {
-                                            var section_data = snapshots.docs[0].data();
-                                            if (section_data.adminCommision != null && section_data
-                                                .adminCommision != '') {
-                                                if (section_data.adminCommision.enable) {
-                                                    commissionModel = true;
-                                                }
-                                            }
-                                        });
-                                    }
-                                    var userToken = result.user.getIdToken();
-                                    var uid = result.user.uid;
-                                    var user = userData.id;
-                                    var firstName = userData.firstName;
-                                    var lastName = userData.lastName;
-                                    var imageURL = userData.profilePictureURL;
-                                    if (subscriptionModel || commissionModel) {
-                                        if (userData.hasOwnProperty('subscriptionPlanId') && userData
-                                            .subscriptionPlanId != '' && userData.subscriptionPlanId != null
-                                        ) {
-                                            var isSubscribed = 'true';
-                                        } else {
-
-                                            var isSubscribed = 'false';
-                                        }
-                                    } else {
-
-                                        var isSubscribed = '';
-                                    }
-                                    var url = "{{ route('setToken') }}";
-                                    $.ajax({
-                                        type: 'POST',
-                                        url: url,
-                                        data: {
-                                            id: uid,
-                                            userId: user,
-                                            email: email,
-                                            password: password,
-                                            firstName: firstName,
-                                            lastName: lastName,
-                                            profilePicture: imageURL,
-                                            isSubscribed: isSubscribed
-                                        },
-                                        headers: {
-                                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                                        },
-                                        success: function(data) {
-                                            if (data.access) {
-                                                if (userData.hasOwnProperty('subscriptionPlanId') &&
-                                                    userData.subscriptionPlanId != '' && userData
-                                                    .subscriptionPlanId != null) {
-                                                    window.location = "{{ route('dashboard') }}";
-                                                } else {
-                                                    if (subscriptionModel || commissionModel) {
-
-                                                        window.location =
-                                                            "{{ route('subscription-plan.show') }}";
-
-                                                    } else {
-                                                        window.location =
-                                                            "{{ route('dashboard') }}";
-                                                    }
-                                                }
-
-                                            }
-                                        }
-                                    })
-
-                                } else {
-
-                                }
-                            } else {
-                                $("#password_required").css('color', 'black').html(
-                                    "<p>{{ trans('lang.waiting_for_approval') }}</p>");
-                                return false;
-                            }
-
-                        })
-
-                    })
-                    .catch(function(error) {
-                        $("#password_required").html(error.message);
-                    });
-                return false;
-            }
-
-            var provider = new firebase.auth.PhoneAuthProvider();
-
-            function loginWithPhoneClick() {
-                jQuery("#login-box").hide();
-                jQuery("#login-with-phone-box").show();
-                jQuery("#phone-box").show();
-                jQuery("#recaptcha-container").show();
-                jQuery("#sendotp_btn").show();
-                window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-                    'size': 'invisible',
-                    'callback': (response) => {}
-                });
-            }
-
-            function loginBackClick() {
-                jQuery("#login-box").show();
-                jQuery("#login-with-phone-box").hide();
-                jQuery("#sendotp_btn").hide();
-            }
+            var loginPhoneNumber = '';
 
             function sendOTP() {
+                var phone = jQuery("#phone").val();
+                var countryCode = jQuery("#country_selector").val();
 
-                if (jQuery("#phone").val() && jQuery("#country_selector").val()) {
-                    var phoneNumber = '+' + jQuery("#country_selector").val() + '' + jQuery("#phone").val();
-                    onlyPhoneNumber = jQuery("#phone").val();
-                    database.collection("users").where("phoneNumber", "==", phoneNumber).where("role", "==", 'vendor').where(
-                        "active", "==", true).get().then(async function(snapshots) {
-                        if (snapshots.docs.length) {
-                            var userData = snapshots.docs[0].data();
-                            firebase.auth().signInWithPhoneNumber(phoneNumber, window.recaptchaVerifier)
-                                .then(function(confirmationResult) {
-                                    window.confirmationResult = confirmationResult;
-                                    if (confirmationResult.verificationId) {
-                                        jQuery("#phone-box").hide();
-                                        jQuery("#recaptcha-container").hide();
-                                        jQuery("#otp-box").show();
-                                        jQuery("#verify_btn").show();
-                                    }
-                                });
-                        } else {
-                            jQuery("#password_required_new").html("User is inactive or not found.");
-                        }
-                    });
+                if (!phone || !countryCode) {
+                    jQuery("#password_required_new").html("Telefon raqamini kiriting.");
+                    return;
                 }
+
+                loginPhoneNumber = '+' + countryCode + phone;
+                jQuery("#password_required_new").html("");
+                jQuery("#sendotp_btn").prop('disabled', true).text('Yuborilmoqda...');
+
+                // Avval Firestore da foydalanuvchi borligini tekshiramiz
+                database.collection("users")
+                    .where("phoneNumber", "==", loginPhoneNumber)
+                    .where("role", "==", 'vendor')
+                    .where("active", "==", true)
+                    .get().then(function(snapshots) {
+                        if (!snapshots.docs.length) {
+                            jQuery("#password_required_new").html("Foydalanuvchi topilmadi yoki faol emas.");
+                            jQuery("#sendotp_btn").prop('disabled', false).text('Send OTP');
+                            return;
+                        }
+
+                        // Eskiz orqali OTP yuborish
+                        $.ajax({
+                            type: 'POST',
+                            url: "{{ route('sendOtp') }}",
+                            data: { phone: loginPhoneNumber },
+                            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                            success: function(data) {
+                                jQuery("#phone-box").hide();
+                                jQuery("#otp-box").show();
+                                jQuery("#verify_btn").show();
+                                jQuery("#sendotp_btn").hide();
+                            },
+                            error: function(xhr) {
+                                var msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'SMS yuborishda xatolik.';
+                                jQuery("#password_required_new").html(msg);
+                                jQuery("#sendotp_btn").prop('disabled', false).text('Send OTP');
+                            }
+                        });
+                    }).catch(function(err) {
+                        jQuery("#password_required_new").html(err.message);
+                        jQuery("#sendotp_btn").prop('disabled', false).text('Send OTP');
+                    });
             }
 
             function applicationVerifier() {
-                window.confirmationResult.confirm(document.getElementById("verificationcode").value)
-                    .then(function(result) {                        
-                        database.collection("users").where('phoneNumber', "==", result.user.phoneNumber /* onlyPhoneNumber */).get().then(
-                            async function(snapshots_login) {
-                                userData = snapshots_login.docs[0].data();
-                                if (userData) {
-                                    if (userData.role == "vendor" && userData.active == true) {
-                                        if (userData.hasOwnProperty('sectionId') && userData.sectionId != null && userData.sectionId != '') {
-                                            await database.collection('sections').where('id', '==', userData.sectionId).get().then(async function(snapshots) {
-                                                var section_data = snapshots.docs[0].data();
-                                                if (section_data.adminCommision != null && section_data
-                                                    .adminCommision != '') {
-                                                    if (section_data.adminCommision.enable) {
-                                                        commissionModel = true;
-                                                    }
-                                                }
-                                            });
-                                        }
-                                        var uid = userData.id;
-                                        var user = userData.id;
-                                        var firstName = userData.firstName;
-                                        var phoneNumber = userData.phoneNumber;
-                                        var lastName = userData.lastName;
-                                        var imageURL = '';
-                                        if (subscriptionModel || commissionModel) {
-                                            if (userData.hasOwnProperty('subscriptionPlanId') && userData
-                                                .subscriptionPlanId != '' && userData.subscriptionPlanId != null
-                                            ) {
-                                                var isSubscribed = 'true';
-                                            } else {
+                var otp = jQuery("#verificationcode").val();
+                if (!otp) {
+                    jQuery("#password_required_new").html("OTP kodni kiriting.");
+                    return;
+                }
 
-                                                var isSubscribed = 'false';
-                                            }
-                                        } else {
+                jQuery("#verify_btn").prop('disabled', true).text('Tekshirilmoqda...');
 
-                                            var isSubscribed = '';
-                                        }
-                                        var url = "{{ route('setToken') }}";
-
-                                        $.ajax({
-                                            type: 'POST',
-                                            url: url,
-                                            data: {
-                                                id: uid,
-                                                userId: user,
-                                                email: phoneNumber,
-                                                password: '',
-                                                firstName: firstName,
-                                                lastName: lastName,
-                                                profilePicture: imageURL,
-                                                isSubscribed: isSubscribed
-                                            },
-                                            headers: {
-                                                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                                            },
-                                            success: function(data) {
-                                                if (data.access) {
-                                                    if (userData.hasOwnProperty('subscriptionPlanId') &&
-                                                        userData.subscriptionPlanId != '' && userData
-                                                        .subscriptionPlanId != null) {
-                                                        window.location = "{{ route('dashboard') }}";
-                                                    } else {
-                                                        if (subscriptionModel || commissionModel) {
-
-                                                            window.location =
-                                                                "{{ route('subscription-plan.show') }}";
-
-                                                        } else {
-                                                            if (userData.hasOwnProperty('sectionId') &&
-                                                                userData.sectionId != null &&
-                                                                userData.sectionId != '') {
-                                                                window.location =
-                                                                    "{{ route('dashboard') }}";
-                                                            } else {
-                                                                window.location =
-                                                                    "{{ route('store') }}";
-                                                            }
-
-                                                        }
-                                                    }
-                                                }
+                $.ajax({
+                    type: 'POST',
+                    url: "{{ route('verifyOtp') }}",
+                    data: { phone: loginPhoneNumber, otp: otp },
+                    headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                    success: function(data) {
+                        // OTP to'g'ri - Firestore dan user ma'lumotini olamiz
+                        database.collection("users")
+                            .where('phoneNumber', '==', loginPhoneNumber)
+                            .get().then(async function(snapshots_login) {
+                                var userData = snapshots_login.docs[0].data();
+                                if (userData && userData.role == "vendor" && userData.active == true) {
+                                    if (userData.hasOwnProperty('sectionId') && userData.sectionId != null && userData.sectionId != '') {
+                                        await database.collection('sections').where('id', '==', userData.sectionId).get().then(async function(snaps) {
+                                            var section_data = snaps.docs[0].data();
+                                            if (section_data.adminCommision && section_data.adminCommision.enable) {
+                                                commissionModel = true;
                                             }
                                         });
-
-                                    } else {
-                                        jQuery("#password_required_new").html("User is inactive or not found.");
                                     }
+
+                                    var isSubscribed = '';
+                                    if (subscriptionModel || commissionModel) {
+                                        isSubscribed = (userData.hasOwnProperty('subscriptionPlanId') && userData.subscriptionPlanId) ? 'true' : 'false';
+                                    }
+
+                                    $.ajax({
+                                        type: 'POST',
+                                        url: "{{ route('setToken') }}",
+                                        data: {
+                                            id: userData.id,
+                                            userId: userData.id,
+                                            email: loginPhoneNumber,
+                                            password: '',
+                                            firstName: userData.firstName,
+                                            lastName: userData.lastName,
+                                            profilePicture: '',
+                                            isSubscribed: isSubscribed
+                                        },
+                                        headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                                        success: function(res) {
+                                            if (res.access) {
+                                                if (userData.hasOwnProperty('subscriptionPlanId') && userData.subscriptionPlanId) {
+                                                    window.location = "{{ route('dashboard') }}";
+                                                } else if (subscriptionModel || commissionModel) {
+                                                    window.location = "{{ route('subscription-plan.show') }}";
+                                                } else if (userData.hasOwnProperty('sectionId') && userData.sectionId) {
+                                                    window.location = "{{ route('dashboard') }}";
+                                                } else {
+                                                    window.location = "{{ route('store') }}";
+                                                }
+                                            }
+                                        }
+                                    });
+                                } else {
+                                    jQuery("#password_required_new").html("Foydalanuvchi topilmadi yoki faol emas.");
+                                    jQuery("#verify_btn").prop('disabled', false).text('OTP Verify');
                                 }
-                            })
-                    }).catch(function(error) {
-                        jQuery("#password_required_new").html(error.message);
-                    });
-            }            
+                            });
+                    },
+                    error: function(xhr) {
+                        var msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'OTP xato.';
+                        jQuery("#password_required_new").html(msg);
+                        jQuery("#verify_btn").prop('disabled', false).text('OTP Verify');
+                    }
+                });
+            }
 
             var newcountriesjs = '<?php echo json_encode($newcountriesjs); ?>';
             var newcountriesjs = JSON.parse(newcountriesjs);
@@ -653,144 +433,6 @@
                 d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
                 let expires = "expires=" + d.toUTCString();
                 document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
-            }
-            function googleAuth() {
-                var provider=new firebase.auth.GoogleAuthProvider();
-                firebase.auth().signInWithPopup(provider)
-                    .then(function(result) {
-                        var user=result.user;
-                        saveUserData(user);
-                    }).catch(function(error) {
-                        console.error("Google Sign-In Error:",error.message);
-
-                    });
-            }
-
-
-
-            function saveUserData(user) {
-                jQuery('#data-table_processing').show();
-                database.collection("users").doc(user.uid).get().then(async function(snapshots_login) {
-                    var userData=snapshots_login.data();
-                    if(userData) {
-                        if(userData.role=="vendor"&&userData.active) {
-                            var uid=userData.id;
-                            var firstName=userData.firstName;
-                            var phoneNumber=userData.phoneNumber;
-                            var lastName=userData.lastName;
-                            var imageURL='';
-                            var documentVerify=userData.hasOwnProperty('isDocumentVerify')? userData.isDocumentVerify:false;
-                            setCookie('documentVerify',documentVerify);
-                            if(subscriptionModel||commisionModel) {
-                                if(userData.hasOwnProperty('subscriptionPlanId')&&userData.subscriptionPlanId!='' &&userData.subscriptionPlanId!=null) {
-                                    var isSubscribed='true';
-                                } else {
-                                    var isSubscribed='false';
-                                }
-                            } else {
-                                var isSubscribed='';
-                            }
-                            $.ajax({
-                                type: 'POST',
-                                url: "{{ route('setToken') }}",
-                                data: {
-                                    id: uid,
-                                    userId: uid,
-                                    email: phoneNumber,
-                                    password: '',
-                                    firstName: firstName,
-                                    lastName: lastName,
-                                    profilePicture: imageURL,
-                                    provider: "google",
-                                    isSubscribed:isSubscribed
-                                },
-
-                                headers: {
-                                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                                },
-
-                                success: function(data) {
-                                    if(data.access) {
-                                        jQuery('#data-table_processing').hide();
-                                        if(userData.hasOwnProperty('subscriptionPlanId')&&userData.subscriptionPlanId!='' &&userData.subscriptionPlanId!=null) {
-                                            if(documentVerify===true|| documentVerificationEnable===false) {
-                                                window.location="{{ route('dashboard') }}";
-                                            } else {
-                                                window.location="{{ route('vendors.document') }}";
-                                            }
-
-                                        } else {
-                                            if(subscriptionModel||commisionModel) {
-                                                window.location=
-                                                    "{{ route('subscription-plan.show') }}";
-
-                                            } else {
-                                                if(documentVerify==true|| documentVerificationEnable==false) {
-                                                    window.location= "{{ route('dashboard') }}";
-                                                } else {
-                                                    window.location= "{{ route('vendors.document') }}";
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        jQuery('#data-table_processing').hide();
-                                        $(".email_error").hide();
-                                        $(".password_error").show();
-                                        $(".password_error").html("");
-                                        window.scrollTo(0,0);
-                                        $(".password_error").append( "<p>{{ trans('lang.set_token_error') }}</p>");
-
-                                    }
-
-                                },
-
-                                error: function() {
-                                    jQuery('#data-table_processing').hide();
-                                    $(".email_error").hide();
-                                    $(".password_error").show();
-                                    $(".password_error").html("");
-                                    window.scrollTo(0,0);
-                                    $(".password_error").append(
-                                        "<p>{{ trans('lang.set_token_error') }}</p>");
-                                }
-
-                            });
-
-                        } else {
-                            jQuery('#data-table_processing').hide();
-                            $(".email_error").hide();
-                            $(".password_error").show();
-                            $(".password_error").html("");
-                            window.scrollTo(0,0);
-                            $(".password_error").append("<p>{{ trans('lang.user_active_error') }}</p>");
-                        }
-
-                    } else {
-                        var loginType='google';
-                        var phoneNumber=user.phoneNumber||'';
-                        var firstName=user.displayName? user.displayName.split(' ')[0]:'';
-                        var lastName=user.displayName? user.displayName.split(' ')[1]:'';
-                        var uuid=user.uid;
-                        var email=user.email||'';
-                        var photoURL=user.photoURL||'';
-                        var createdAtman=firebase.firestore.Timestamp.fromDate(new Date());
-                        var redirectUrl=
-                            `{{ url('register') }}?uuid=${encodeURIComponent(uuid)}&loginType=${encodeURIComponent(loginType)}&phoneNumber=${encodeURIComponent(phoneNumber)}&firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}&email=${encodeURIComponent(email)}&photoURL=${encodeURIComponent(photoURL)}&createdAt=${createdAtman.toDate()}`;
-                        jQuery('#data-table_processing').hide();
-                        window.location.href=redirectUrl;
-                    }
-
-                }).catch(function(error) {
-                    console.log(error);
-                    jQuery('#data-table_processing').hide();
-                    $(".email_error").hide();
-                    $(".password_error").show();
-                    $(".password_error").html("");
-                    window.scrollTo(0,0);
-                    $(".password_error").append("<p>"+error.message+"</p>");
-
-                });
-
             }
         </script>
 

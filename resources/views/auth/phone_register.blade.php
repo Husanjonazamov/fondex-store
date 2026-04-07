@@ -361,179 +361,149 @@
             });
 
 
+            var registerPhoneNumber = '';
+
             function sendOTP() {
-                if (!window.recaptchaVerifier) {
-                    jQuery("#recaptcha-container").show();
-
-                    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-                        'size': 'invisible',
-                        'callback': (response) => {
-
-                        }
-                    });
-                }
                 var firstName = $('#firstName').val();
-                var lastName = $('#lastName').val();
-                var email = $('#email').val();
+                var lastName  = $('#lastName').val();
+                var email     = $('#email').val();
+                var phone     = jQuery("#phone").val();
+                var country   = jQuery("#country_selector").val();
 
                 if (firstName == '') {
-
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>{{ trans('lang.enter_owners_name_error') }}</p>");
+                    $(".error_top").show().html("<p>{{ trans('lang.enter_owners_name_error') }}</p>");
                     window.scrollTo(0, 0);
-                } else if (jQuery("#phone").val() == "") {
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>{{ trans('lang.enter_owners_phone') }}</p>");
+                    return;
+                } else if (phone == "") {
+                    $(".error_top").show().html("<p>{{ trans('lang.enter_owners_phone') }}</p>");
                     window.scrollTo(0, 0);
+                    return;
                 } else if (email == "") {
-                    $(".error_top").show();
-                    $(".error_top").html("");
-                    $(".error_top").append("<p>{{ trans('lang.enter_owners_email') }}</p>");
+                    $(".error_top").show().html("<p>{{ trans('lang.enter_owners_email') }}</p>");
                     window.scrollTo(0, 0);
-                } else {
-                    var phoneNumber = '+' + jQuery("#country_selector").val() + jQuery("#phone").val();
-
-                    database.collection("users").where('phoneNumber', '==', phoneNumber).get().then(async function(snapshots) {
-                        if (snapshots.docs.length > 0) {
-                            alert('You already have account with this phone number')
-                            return false;
-                        } else {
-                            $('#hidden_fName').val(firstName);
-                            $('#hidden_lName').val(lastName);
-                            $('#hidden_email').val(email);
-
-
-                            firebase.auth().signInWithPhoneNumber(phoneNumber, window.recaptchaVerifier)
-                                .then(function(confirmationResult) {
-                                    window.confirmationResult = confirmationResult;
-                                    if (confirmationResult.verificationId) {
-                                        $('#firstName_div').hide();
-                                        $('#lastName_div').hide();
-                                        $('#email_div').hide();
-
-                                        $('#phone-box').hide();
-
-
-                                        jQuery("#recaptcha-container").hide();
-                                        jQuery("#verify_btn").show();
-                                        jQuery("#otp-box").show();
-                                    }
-                                });
-                        }
-                    })
-
-
+                    return;
                 }
 
+                registerPhoneNumber = '+' + country + phone;
 
+                database.collection("users").where('phoneNumber', '==', registerPhoneNumber).get().then(function(snapshots) {
+                    if (snapshots.docs.length > 0) {
+                        $(".error_top").show().html("<p>Bu telefon raqam bilan allaqachon hisob mavjud.</p>");
+                        window.scrollTo(0, 0);
+                        return;
+                    }
+
+                    $('#hidden_fName').val(firstName);
+                    $('#hidden_lName').val(lastName);
+                    $('#hidden_email').val(email);
+
+                    $('#send-code').prop('disabled', true).text('Yuborilmoqda...');
+
+                    $.ajax({
+                        type: 'POST',
+                        url: "{{ route('sendOtp') }}",
+                        data: { phone: registerPhoneNumber },
+                        headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                        success: function() {
+                            $('#firstName_div').hide();
+                            $('#lastName_div').hide();
+                            $('#email_div').hide();
+                            $('#phone-box').hide();
+                            jQuery("#verify_btn").show();
+                            jQuery("#otp-box").show();
+                            $('#send-code').hide();
+                        },
+                        error: function(xhr) {
+                            var msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'SMS yuborishda xatolik.';
+                            $(".error_top").show().html("<p>" + msg + "</p>");
+                            window.scrollTo(0, 0);
+                            $('#send-code').prop('disabled', false).text('{{ trans("lang.otp_send") }}');
+                        }
+                    });
+                });
             }
 
             function applicationVerifier() {
                 var code = $('#verificationcode').val();
                 if (code == "") {
-                    $('.otp_error').html('Please Enter OTP')
-                } else {
-                    window.confirmationResult.confirm(document.getElementById("verificationcode").value)
-                        .then(async function(result) {
-                            var phoneNumber = result.user.phoneNumber;
-                            var firstName = $('#hidden_fName').val();
-                            var lastName = $('#hidden_lName').val();
-                            var email = $('#hidden_email').val();
+                    $('.otp_error').html('OTP kodni kiriting.');
+                    return;
+                }
 
-                            var password = "";
+                jQuery("#verify_btn").prop('disabled', true).text('Tekshirilmoqda...');
 
-                            var uuid = result.user.uid;
+                $.ajax({
+                    type: 'POST',
+                    url: "{{ route('verifyOtp') }}",
+                    data: { phone: registerPhoneNumber, otp: code },
+                    headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                    success: async function() {
+                        var firstName = $('#hidden_fName').val();
+                        var lastName  = $('#hidden_lName').val();
+                        var email     = $('#hidden_email').val();
+                        var uuid      = database.collection('users').doc().id;
+                        var coordinates = new firebase.firestore.GeoPoint(0, 0);
 
-                            
-                            coordinates = new firebase.firestore.GeoPoint(0, 0);
-                            geoFirestore.collection("users").doc(uuid).set({
+                        try {
+                            await database.collection("users").doc(uuid).set({
                                 'email': email,
                                 'firstName': firstName,
                                 'lastName': lastName,
                                 'id': uuid,
-                                'phoneNumber': phoneNumber,
+                                'phoneNumber': registerPhoneNumber,
                                 'role': "vendor",
                                 'profilePictureURL': "",
                                 'vendorID': '',
                                 'active': vendor_active,
-                                'coordinates': coordinates,
+                                'coordinates': new firebase.firestore.GeoPoint(0, 0),
                                 'createdAt': createdAt,
                                 'sectionId': '',
                                 'isDocumentVerify': false,
-                            }).then(async function(result) {
-                                autoAprroveVendor.get().then(async function(snapshots) {
-                                    var formattedDate = new Date();
-                                    var month = formattedDate.getMonth() + 1;
-                                    var day = formattedDate.getDate();
-                                    var year = formattedDate.getFullYear();
-
-                                    month = month < 10 ? '0' + month : month;
-                                    day = day < 10 ? '0' + day : day;
-
-                                    formattedDate = day + '-' + month + '-' + year;
-
-                                    var message = emailTemplatesData.message;
-                                    message = message.replace(/{userid}/g, uuid);
-                                    message = message.replace(/{username}/g, firstName + ' ' +
-                                        lastName);
-                                    message = message.replace(/{useremail}/g, "");
-                                    message = message.replace(/{userphone}/g, phoneNumber);
-                                    message = message.replace(/{date}/g, formattedDate);
-
-                                    emailTemplatesData.message = message;
-
-                                    var url = "{{ url('send-email') }}";
-
-                                    var sendEmailStatus = await sendEmail(url,
-                                        emailTemplatesData.subject, emailTemplatesData
-                                        .message, [adminEmail]);
-
-                                    if (sendEmailStatus) {
-
-                                        var vendordata = snapshots.data();
-                                        // if (vendordata.auto_approve_vendor == false) {
-                                        if (vendor_active == false) {                                        
-                                            $(".alert-success").show();
-                                            $(".alert-success").html("");
-                                            $(".alert-success").append(
-                                                "<p>{{ trans('lang.signup_waiting_approval') }}</p>"
-                                                );
-                                            window.scrollTo(0, 0);
-                                            setTimeout(function() {
-                                                window.location.href =
-                                                    '{{ route('login') }}';
-                                            }, 5000);
-                                        } else {
-                                            $(".alert-success").show();
-                                            $(".alert-success").html("");
-                                            $(".alert-success").append(
-                                                "<p>{{ trans('lang.thank_you_signup_msg') }}</p>"
-                                                );
-                                            window.scrollTo(0, 0);
-                                            setTimeout(function() {
-                                                window.location.href =
-                                                    '{{ route('login') }}';
-                                            }, 5000);
-                                        }
-
-                                    }
-
-
-                                }).catch((error) => {
-
-                                    console.error("Error writing document: ", error);
-                                    $("#field_error").html(error);
-
-                                });
                             });
 
+                            // Email xabarnoma yuborish
+                            if (emailTemplatesData) {
+                                var formattedDate = new Date();
+                                var month = formattedDate.getMonth() + 1;
+                                var day   = formattedDate.getDate();
+                                var year  = formattedDate.getFullYear();
+                                month = month < 10 ? '0' + month : month;
+                                day   = day < 10 ? '0' + day : day;
+                                formattedDate = day + '-' + month + '-' + year;
 
-                        }).catch((error) => {
-                            $(".otp_error").html("OTP verification failed");
-                        });
-                }
+                                var message = emailTemplatesData.message;
+                                message = message.replace(/{userid}/g, uuid);
+                                message = message.replace(/{username}/g, firstName + ' ' + lastName);
+                                message = message.replace(/{useremail}/g, email);
+                                message = message.replace(/{userphone}/g, registerPhoneNumber);
+                                message = message.replace(/{date}/g, formattedDate);
+
+                                await sendEmail("{{ url('send-email') }}", emailTemplatesData.subject, message, [adminEmail]);
+                            }
+
+                            if (vendor_active == false) {
+                                $(".alert-success").show().html("<p>{{ trans('lang.signup_waiting_approval') }}</p>");
+                            } else {
+                                $(".alert-success").show().html("<p>{{ trans('lang.thank_you_signup_msg') }}</p>");
+                            }
+                            window.scrollTo(0, 0);
+                            setTimeout(function() {
+                                window.location.href = '{{ route('login') }}';
+                            }, 5000);
+
+                        } catch(error) {
+                            console.error("Register error:", error);
+                            var errMsg = error && error.message ? error.message : JSON.stringify(error);
+                            $(".otp_error").html("Xatolik: " + errMsg);
+                            jQuery("#verify_btn").prop('disabled', false).text('{{ trans("lang.otp_verify") }}');
+                        }
+                    },
+                    error: function(xhr) {
+                        var msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'OTP xato.';
+                        $('.otp_error').html(msg);
+                        jQuery("#verify_btn").prop('disabled', false).text('{{ trans("lang.otp_verify") }}');
+                    }
+                });
             }
 
             async function sendEmail(url, subject, message, recipients) {

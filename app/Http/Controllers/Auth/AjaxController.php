@@ -34,6 +34,8 @@ use App\Http\Controllers\Controller;
 
 use Illuminate\Foundation\Auth\AuthenticatesUsers;
 
+use App\Http\Services\SmsServices;
+
 use Laravel\Socialite\Facades\Socialite;
 
 use Prettus\Validator\Exceptions\ValidatorException;
@@ -134,6 +136,49 @@ class AjaxController extends Controller
 
         return $data;
 
+    }
+
+    public function sendOtp(Request $request)
+    {
+        $phone = $request->phone; // e.g. "+998901234567"
+
+        $otp = rand(100000, 999999);
+
+        // OTP ni session ga saqlaymiz (5 daqiqa)
+        session(["otp_$phone" => $otp, "otp_time_$phone" => now()->timestamp]);
+
+        try {
+            (new SmsServices())->sendOtpSms($phone, $otp);
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function verifyOtp(Request $request)
+    {
+        $phone = $request->phone;
+        $otp   = $request->otp;
+
+        $savedOtp  = session("otp_$phone");
+        $savedTime = session("otp_time_$phone");
+
+        if (!$savedOtp) {
+            return response()->json(['success' => false, 'message' => 'OTP topilmadi. Qayta yuboring.'], 422);
+        }
+
+        if (now()->timestamp - $savedTime > 300) {
+            return response()->json(['success' => false, 'message' => 'OTP muddati tugagan (5 daqiqa).'], 422);
+        }
+
+        if ((string)$savedOtp !== (string)$otp) {
+            return response()->json(['success' => false, 'message' => 'OTP noto\'g\'ri.'], 422);
+        }
+
+        // OTP to'g'ri - sessiondan o'chiramiz
+        session()->forget(["otp_$phone", "otp_time_$phone"]);
+
+        return response()->json(['success' => true]);
     }
 
     public function setSubcriptionFlag(Request $request)

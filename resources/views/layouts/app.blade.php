@@ -518,17 +518,19 @@
             var version = database.collection('settings').doc("Version");
 
             version.get().then(async function(snapshots) {
-                var version_data = snapshots.data();
+                if (snapshots.exists) {
+                    var version_data = snapshots.data();
 
-                if (version_data == undefined) {
-                    database.collection('settings').doc('Version').set({});
-                }
-                try {
+                    if (version_data == undefined) {
+                        database.collection('settings').doc('Version').set({});
+                    }
+                    try {
 
-                    $('.web_version').html("V:" + version_data.web_version);
+                        $('.web_version').html("V:" + version_data.web_version);
 
-                } catch (error) {
+                    } catch (error) {
 
+                    }
                 }
 
             });
@@ -695,72 +697,71 @@
 
             var pageLoadedAdvertisement = 0;
             database.collection('users').where('id', '==', cuser_id).get().then(async function(snapshots) {
-                var userData = snapshots.docs[0].data();
-                var photoURL = userData.profilePictureURL 
-                    ? userData.profilePictureURL 
-                    : "{{ asset('images/users/user-2.png') }}";
+                if (!snapshots.empty) {
+                    var userData = snapshots.docs[0].data();
+                    var photoURL = userData.profilePictureURL 
+                        ? userData.profilePictureURL 
+                        : "{{ asset('images/users/user-2.png') }}";
 
-                document.querySelectorAll('.userimage').forEach(function(img) {
-                    img.src = photoURL;
-                    img.onerror = function() {
-                        this.onerror = null;
-                        this.src = "{{ asset('images/users/user-2.png') }}";
-                    };
-                });
+                    document.querySelectorAll('.userimage').forEach(function(img) {
+                        img.src = photoURL;
+                        img.onerror = function() {
+                            this.onerror = null;
+                            this.src = "{{ asset('images/users/user-2.png') }}";
+                        };
+                    });
 
-                if (userData.hasOwnProperty('vendorID') && userData.vendorID != '' && userData.vendorID != null) {
-                    vendorId = userData.vendorID;
-                    database.collection('advertisements').where('vendorId', "==", vendorId).onSnapshot(function(doc) {
+                    if (userData.hasOwnProperty('vendorID') && userData.vendorID != '' && userData.vendorID != null) {
+                        vendorId = userData.vendorID;
+                        database.collection('advertisements').where('vendorId', "==", vendorId).onSnapshot(function(doc) {
 
-                        if (pageLoadedAdvertisement) {
+                            if (pageLoadedAdvertisement) {
 
-                            doc.docChanges().forEach(function(change) {
-                                val = change.doc.data();
-                                var recentlyModifiedAd = localStorage.getItem('storeModifiedAd');
+                                doc.docChanges().forEach(function(change) {
+                                    val = change.doc.data();
+                                    var recentlyModifiedAd = localStorage.getItem('storeModifiedAd');
 
-                                if (recentlyModifiedAd === val.id) {
-                                    localStorage.removeItem('storeModifiedAd');
-                                    return;
-                                }
-                                if (change.type == "modified") {
-                                    var routeAdview = "{{ route('advertisements.view', ':id') }}";
-                                    routeAdview = routeAdview.replace(':id', val.id);
-                                    if (val.status == 'approved') {
-                                        console.log('here')
-                                        if (val.status == 'approved' && val.isPaused) {
-                                            $('.advertisement_paused_sub').html(advPausedSub);
-                                            $('.advertisement_paused_msg').html(advPausedMsg);
-                                            $('#advertisement_paused_notification').modal('show');
-                                            $('#advertisement_paused_route').attr('href', routeAdview);
-                                        } else if (val.status == 'approved' && val.isPaused == null) {
-
-                                            $('.advertisement_accepted_msg').html(advApprovedMsg);
-                                            $('.advertisement_accepted_sub').html(advApprovedSub);
-                                            $('#advertisement_accepted_notification').modal('show');
-                                            $('#advertisement_accepted_route').attr('href', routeAdview);
-                                        } else {
-                                            $('.advertisement_resumed_sub').html(advResumedSub);
-                                            $('.advertisement_resumed_msg').html(advResumedMsg);
-                                            $('#advertisement_resumed_notification').modal('show');
-                                            $('#advertisement_resumed_route').attr('href', routeAdview);
-                                        }
-                                    } else if (val.status == 'canceled') {
-                                        $('.advertisement_cancelled_sub').html(advCancelledSub);
-                                        $('.advertisement_cancelled_msg').html(advCancelledMsg);
-                                        $('#advertisement_canceled_notification').modal('show');
-                                        $('#advertisement_canceled_route').attr('href', routeAdview);
+                                    if (recentlyModifiedAd === val.id) {
+                                        localStorage.removeItem('storeModifiedAd');
+                                        return;
                                     }
+                                    if (change.type == "modified") {
+                                        var routeAdview = "{{ route('advertisements.view', ':id') }}";
+                                        routeAdview = routeAdview.replace(':id', val.id);
+                                        if (val.status == 'approved') {
+                                            console.log('here')
+                                            if (val.status == 'approved' && val.isPaused) {
+                                                $('.advertisement_paused_sub').html(advPausedSub);
+                                                $('.advertisement_paused_msg').html(advPausedMsg);
+                                                $('#advertisement_paused_notification').modal('show');
+                                                $('#advertisement_paused_route').attr('href', routeAdview);
+                                            } else if (val.status == 'approved' && val.isPaused == null) {
 
-                                }
-                            })
-                        } else {
-                            pageLoadedAdvertisement = 1;
-                        }
-                    })
+                                                $('.advertisement_accepted_msg').html(advApprovedMsg);
+                                                $('.advertisement_accepted_sub').html(advApprovedSub);
+                                                $('#advertisement_accepted_notification').modal('show');
+                                                $('#advertisement_accepted_route').attr('href', routeAdview);
+                                            } else {
+                                                $('.advertisement_resumed_sub').html(advResumedSub);
+                                                $('.advertisement_resumed_msg').html(advResumedMsg);
+                                                $('#advertisement_resumed_notification').modal('show');
+                                                $('#advertisement_resumed_route').attr('href', routeAdview);
+                                            }
+                                        } else if (val.status == 'canceled') {
+                                            $('.advertisement_cancelled_sub').html(advCancelledSub);
+                                            $('.advertisement_cancelled_msg').html(advCancelledMsg);
+                                            $('#advertisement_canceled_notification').modal('show');
+                                            $('#advertisement_canceled_route').attr('href', routeAdview);
+                                        }
 
+                                    }
+                                })
+                            } else {
+                                pageLoadedAdvertisement = 1;
+                            }
+                        })
+                    }
                 }
-
-
             });
 
             var langcount = 0;

@@ -36,7 +36,7 @@
 
                             <div class="card-body">
 
-                                <h4 class="card-title"><?php echo $customers_list ?></h4>
+                                <h4 class="card-title">{{trans('lang.category_list')}}</h4>
 
                                 
                             <div id="users-table_filter" class="pull-right"><label>{{trans('lang.search_by')}}

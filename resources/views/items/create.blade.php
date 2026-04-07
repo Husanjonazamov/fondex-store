@@ -305,7 +305,14 @@
 
 
     <script>
-        var database = firebase.firestore();
+        $(window).on('load', function() {
+            console.log("DEBUG: Item Create Script Window Loaded.");
+            initCreatePage();
+        });
+
+        function initCreatePage() {
+            console.log("DEBUG: initCreatePage Starting...");
+            var database = firebase.firestore();
         var addOnesTitle = [];
         var addOnesPrice = [];
         var vendor_categories = "";
@@ -338,66 +345,83 @@
         var categories_list=[];
         var subscriptionBusinessModel = database.collection('settings').doc("vendor");
         subscriptionBusinessModel.get().then(async function(snapshots) {
+            console.log("Subscription settings fetched.");
+            if (snapshots.exists) {
                 var subscriptionSetting = snapshots.data();
-                if (subscriptionSetting.subscription_model == true) {
+                if (subscriptionSetting && subscriptionSetting.subscription_model == true) {
                     subscriptionModel = true;
                 }
-            });
+            }
+        });
         var refCurrency = database.collection('currencies').where('isActive', '==', true);
         refCurrency.get().then(async function(snapshots) {
-            var currencyData = snapshots.docs[0].data();
-            currentCurrency = currencyData.symbol;
-            currencyAtRight = currencyData.symbolAtRight;
+            if (!snapshots.empty) {
+                var currencyData = snapshots.docs[0].data();
+                currentCurrency = currencyData.symbol;
+                currencyAtRight = currencyData.symbolAtRight;
 
-            if (currencyData.decimal_degits) {
-                decimal_degits = currencyData.decimal_degits;
+                if (currencyData.decimal_degits) {
+                    decimal_degits = currencyData.decimal_degits;
+                }
             }
         });
         
         database.collection('users').where('id', '==', vendorUserId).get().then(async function(snapshots) {
-            var data = snapshots.docs[0].data();
-            if (subscriptionModel) {
-                if (data.hasOwnProperty('subscription_plan') && data.subscription_plan != null && data
-                    .subscription_plan != '') {
-                    itemLimit = data.subscription_plan.itemLimit;
+            if (!snapshots.empty) {
+                var data = snapshots.docs[0].data();
+                if (subscriptionModel) {
+                    if (data.hasOwnProperty('subscription_plan') && data.subscription_plan != null && data
+                        .subscription_plan != '') {
+                        itemLimit = data.subscription_plan.itemLimit;
+                    }
                 }
             }
-
         });
 
         getVendorId(vendorUserId).then(async data => {
+            if (!data) {
+                console.warn("No vendor Firestore data found for user ID: " + vendorUserId + ". Using defaults.");
+                vandorId = '';
+                section_id = '';
+            } else {
+                vandorId = data.id;
+                section_id = data.section_id;
+            }
 
-            vandorId = data.id;
-
-            itemCountRef = await database.collection('vendor_products').where('vendorID', '==', vandorId).get();
-            createdItem = itemCountRef.size;
-            section_id = data.section_id;
+            try {
+                itemCountRef = await database.collection('vendor_products').where('vendorID', '==', vandorId).get();
+                createdItem = itemCountRef.size;
+            } catch (err) {
+                console.warn("Could not fetch item count from Firestore:", err);
+            }
 
 
 
             if (section_id) {
                 var section = database.collection('sections').where('id', '==', section_id);
                 await section.get().then(async function(snapshots) {
-                    var section_data = snapshots.docs[0].data();
-                    section_flag = section_data.serviceTypeFlag;
+                    if (!snapshots.empty) {
+                        var section_data = snapshots.docs[0].data();
+                        section_flag = section_data.serviceTypeFlag;
 
-                    if (section_data.serviceTypeFlag == "ecommerce-service") {
-                        $('.brandDiv').show();
-                        $("#is_digital_div").show();
-                    }
-
-                    if (section_data.serviceTypeFlag == "delivery-service") {
-                        $('.food_delivery_take_away').removeClass('d-none');
-
-                        if (section_data.is_product_details) {
-                            $('.food_delivery_div').removeClass('d-none');
+                        if (section_data.serviceTypeFlag == "ecommerce-service") {
+                            $('.brandDiv').show();
+                            $("#is_digital_div").show();
                         }
-                    }
-                    if (section_data.adminCommision != null && section_data
-                        .adminCommision != '') {
-                        if (section_data.adminCommision.enable) {
-                            commissionModel = true;
-                            
+
+                        if (section_data.serviceTypeFlag == "delivery-service") {
+                            $('.food_delivery_take_away').removeClass('d-none');
+
+                            if (section_data.is_product_details) {
+                                $('.food_delivery_div').removeClass('d-none');
+                            }
+                        }
+                        if (section_data.adminCommision != null && section_data
+                            .adminCommision != '') {
+                            if (section_data.adminCommision.enable) {
+                                commissionModel = true;
+
+                            }
                         }
                     }
                 });
@@ -407,10 +431,10 @@
                 $("#is_digital_div").hide();
             }
 
-            if (data.section_id != undefined && data.section_id != '') {
+            if (section_id != undefined && section_id != '') {
                 vendor_categories = database.collection('vendor_categories').where('section_id',
-                    '==', data.section_id);
-                brand = database.collection('brands').where('sectionId', '==', data.section_id);
+                    '==', section_id);
+                brand = database.collection('brands').where('sectionId', '==', section_id);
 
             } else {
                 vendor_categories = database.collection('vendor_categories');
@@ -418,7 +442,7 @@
 
             }
             
-            if (commissionModel) {
+            if (commissionModel && data) {
                 if (data.hasOwnProperty('adminCommision')) {
                     var commission_type = data.adminCommision.type;
                     var commission_value = data.adminCommision.commission;
@@ -438,16 +462,40 @@
                 }
             }
 
-            vendor_categories = vendor_categories.where('publish', '==', true);
+            // vendor_categories = vendor_categories.where('publish', '==', true);
+
+            console.log("DEBUG: Fetching categories for section_id: [" + section_id + "]");
+            
+            // Re-initialize if still a string for some reason
+            if (typeof vendor_categories === 'string') {
+                console.log("DEBUG: vendor_categories was string, re-initializing to all.");
+                vendor_categories = database.collection('vendor_categories');
+            }
 
             vendor_categories.get().then(async function(snapshots) {
-                snapshots.docs.forEach((listval) => {
-                    var data = listval.data();
-                    categories_list.push(data);
-                  
-                });
-                 database.collection('vendors').doc(vandorId).get().then(async function(snapshot) {
-                        if (snapshot.exists) {
+                console.log("DEBUG: Categories fetch completed. Snapshots size: " + (snapshots ? snapshots.size : "NULL/UNDEFINED"));
+                if (snapshots && snapshots.size > 0) {
+                    snapshots.docs.forEach((listval) => {
+                        var data = listval.data();
+                        categories_list.push(data);
+                        console.log("DEBUG: Appending category: " + data.title + " (id: " + data.id + ")");
+                        $('#item_category').append($("<option></option>")
+                            .attr("value", data.id)
+                            .text(data.title));
+                    });
+                } else {
+                    console.log("DEBUG: No categories found in Firestore.");
+                }
+                
+                // Force UI refresh for potential Select2/Chosen
+                $('#item_category').trigger('change');
+                if ($('#item_category').hasClass('select2-hidden-accessible')) {
+                    $('#item_category').select2('destroy').select2();
+                }
+
+                if (vandorId) {
+                    database.collection('vendors').doc(vandorId).get().then(async function(snapshot) {
+                         if (snapshot.exists) {
                             var data = snapshot.data();
                             var categoryIDs = []
                             categoryIDs = data.categoryID;
@@ -774,8 +822,56 @@
                                         'digitalProduct': DigitalImg,
                                         'createdAt': firebase.firestore.FieldValue.serverTimestamp() 
                                     }).then(function(result) {
-                                        window.location.href =
-                                            '{{ route('items') }}';
+                                        $.ajax({
+                                            url: '{{ route('items.sync') }}',
+                                            type: 'POST',
+                                            data: {
+                                                'name': name,
+                                                'price': price,
+                                                'quantity': parseInt(item_quantity),
+                                                'disPrice': discount,
+                                                'categoryID': category,
+                                                'brandID': brand,
+                                                'photo': photo,
+                                                'photos': IMG,
+                                                'calories': itemCalories,
+                                                'grams': itemGrams,
+                                                'proteins': itemProteins,
+                                                'fats': itemFats,
+                                                'description': description,
+                                                'publish': itemPublish,
+                                                'section_id': section_id,
+                                                'nonveg': nonveg,
+                                                'veg': veg,
+                                                'addOnsTitle': addOnesTitle,
+                                                'addOnsPrice': addOnesPrice,
+                                                'takeawayOption': itemTakeaway,
+                                                'id': id,
+                                                'item_attribute': item_attribute,
+                                                'product_specification': product_specification,
+                                                'isDigitalProduct': is_digital_product,
+                                                'digitalProduct': DigitalImg,
+                                            },
+                                            success: function(response) {
+                                                if (response.success) {
+                                                    window.location.href = '{{ route('items') }}';
+                                                } else {
+                                                    jQuery("#data-table_processing").hide();
+                                                    $(".error_top").show().html("<p>" + response.message + "</p>");
+                                                    window.scrollTo(0, 0);
+                                                }
+                                            },
+                                            error: function(xhr) {
+                                                jQuery("#data-table_processing").hide();
+                                                var msg = "Error syncing with external API";
+                                                if (xhr.responseJSON && xhr.responseJSON.message) {
+                                                    msg = xhr.responseJSON.message;
+                                                }
+                                                $(".error_top").show().html("<p>" + msg + "</p>");
+                                                window.scrollTo(0, 0);
+                                            }
+                                        });
+
                                     });
                             }).catch(err => {
                                 jQuery("#data-table_processing").hide();
@@ -949,14 +1045,15 @@
         }
 
         async function getVendorId(vendorUser) {
-            var vendorID = '';
-            var vendorData = '';
-            var ref;
-            await database.collection('vendors').where('author', "==", vendorUser).get().then(async function(
-                vendorSnapshots) {
-                vendorData = vendorSnapshots.docs[0].data();
-                vendorID = vendorData.id;
-            })
+            var vendorData = null;
+            try {
+                const vendorSnapshots = await database.collection('vendors').where('author', "==", vendorUser).get();
+                if (!vendorSnapshots.empty) {
+                    vendorData = vendorSnapshots.docs[0].data();
+                }
+            } catch (error) {
+                console.error("Error in getVendorId:", error);
+            }
             return vendorData;
         }
 
@@ -1189,21 +1286,6 @@
             return `${prefix}${id}${random ? `.${Math.trunc(Math.random() * 100000000)}` : ""}`;
         }
 
-        async function storeVariantImageData() {
-            var newPhoto = [];
-            if (variant_photos.length > 0) {
-                await Promise.all(variant_photos.map(async (variantPhoto, index) => {
-                    variantPhoto = variantPhoto.replace(/^data:image\/[a-z]+;base64,/, "");
-                    var uploadTask = await storageRef.child(variant_filename[index]).putString(
-                        variantPhoto, 'base64', {
-                            contentType: 'image/jpg'
-                        });
-                    var downloadURL = await uploadTask.ref.getDownloadURL();
-                    $('[id="variant_' + variant_vIds[index] + '_url"]').val(downloadURL);
-                    newPhoto.push(downloadURL);
-                }));
-            }
-            return newPhoto;
         }
         // Clear error message when user updates the price field
         $(document).on('input', '[id^="price_"]', function() {

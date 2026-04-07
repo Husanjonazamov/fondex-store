@@ -17,8 +17,10 @@ Route::get('lang/change', [App\Http\Controllers\LangController::class, 'change']
 
 Route::post('setToken', [App\Http\Controllers\Auth\AjaxController::class, 'setToken'])->name('setToken');
 Route::post('setSubcriptionFlag', [App\Http\Controllers\Auth\AjaxController::class, 'setSubcriptionFlag'])->name('setSubcriptionFlag');
+Route::post('send-otp', [App\Http\Controllers\Auth\AjaxController::class, 'sendOtp'])->name('sendOtp');
+Route::post('verify-otp', [App\Http\Controllers\Auth\AjaxController::class, 'verifyOtp'])->name('verifyOtp');
 Route::get('register', function () {
-    return view('auth.register');
+    return redirect()->route('register.phone');
 })->name('register');
 Route::get('register/phone', function () {
     return view('auth.phone_register');
@@ -167,4 +169,9 @@ Route::middleware(['check.subscription'])->group(function () {
 
     Route::get('document/upload/{id}', [App\Http\Controllers\DocumentController::class, 'DocumentUpload'])->name('document.upload');
 
+    // Integration Routes
+    Route::post('/items/sync', [App\Http\Controllers\IntegrationController::class, 'syncProduct'])->name('items.sync');
+    Route::get('/items/fetch', [App\Http\Controllers\IntegrationController::class, 'getProducts'])->name('items.fetch');
+    Route::post('/categories/sync', [App\Http\Controllers\IntegrationController::class, 'syncCategory'])->name('categories.sync');
+    Route::get('/categories/fetch', [App\Http\Controllers\IntegrationController::class, 'getCategories'])->name('categories.fetch');
 });

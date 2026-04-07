@@ -408,7 +408,11 @@
             jQuery("#data-table_processing").show();
 
             ref.get().then(async function(snapshots) {
-
+                if (snapshots.empty) {
+                    console.error("Product not found in Firestore.");
+                    jQuery("#data-table_processing").hide();
+                    return;
+                }
                 var product = snapshots.docs[0].data();
 
                 if (product.hasOwnProperty('product_specification')) {
@@ -455,82 +459,86 @@
                 }
 
                 await database.collection('vendors').where('id', "==", product.vendorID).get().then(async function(vendorSnapshots) {
+                    if (!vendorSnapshots.empty) {
+                        var vendorData = vendorSnapshots.docs[0].data();
+                        vendorID = vendorData.id;
+                        section_id = vendorData.section_id;
 
-                    var vendorData = vendorSnapshots.docs[0].data();
-                    vendorID = vendorData.id;
-                    section_id = vendorData.section_id;
+                        if (section_id) {
+                            var section = database.collection('sections').where('id', '==', section_id);
+                            section.get().then(async function(snapshots) {
+                                if (!snapshots.empty) {
+                                    var section_data = snapshots.docs[0].data();
+                                    section_flag = section_data.serviceTypeFlag;
+                                    if (section_data.serviceTypeFlag == "ecommerce-service") {
+                                        $('.brandDiv').show();
+                                        $("#is_digital_div").show();
+                                    }
 
-                    if (section_id) {
-                        var section = database.collection('sections').where('id', '==', section_id);
-                        section.get().then(async function(snapshots) {
-                            var section_data = snapshots.docs[0].data();
-                            section_flag = section_data.serviceTypeFlag;
-                            if (section_data.serviceTypeFlag == "ecommerce-service") {
-                                $('.brandDiv').show();
-                                $("#is_digital_div").show();
-                            }
+                                    if (section_data.serviceTypeFlag == "delivery-service") {
+                                        $('.food_delivery_take_away').removeClass('d-none');
 
-                            if (section_data.serviceTypeFlag == "delivery-service") {
-                                $('.food_delivery_take_away').removeClass('d-none');
-
-                                if (section_data.is_product_details) {
-                                    $('.food_delivery_div').removeClass('d-none');
+                                        if (section_data.is_product_details) {
+                                            $('.food_delivery_div').removeClass('d-none');
+                                        }
+                                    }
                                 }
-                            }
+                            });
+                        } else {
+                            $('.brandDiv').hide();
+                            $("#brand").val('');
+                            $("#is_digital_div").hide();
 
+                        }
+
+                        if (section_id != undefined && section_id != '') {
+
+                            vendor_categories = await database.collection('vendor_categories').where('section_id', '==', section_id);
+                            brand = database.collection('brands').where('sectionId', '==', vendorData.section_id).get();
+                        } else {
+
+                            vendor_categories = await database.collection('vendor_categories');
+                            var brand = database.collection('brands');
+                        }
+
+                        vendor_categories = vendor_categories.where('publish', '==', true).get();
+
+                        vendor_categories.then(async function(snapshots) {
+
+                            snapshots.docs.forEach((listval) => {
+                                var data = listval.data();
+                                categories_list.push(data);
+                            });
+                            var categoryIDs = []
+                            categoryIDs = vendorData.categoryID;
+                            categories_list.forEach((val) => {
+                                if (categoryIDs.includes(val.id)) {
+                                    $('#item_category').append($("<option></option>")
+                                        .attr("value", val.id)
+                                        .text(val.title));
+                                }
+                            })
+                            $('#item_category').val(product.categoryID);
                         });
-                    } else {
-                        $('.brandDiv').hide();
-                        $("#brand").val('');
-                        $("#is_digital_div").hide();
 
+                        await brand.then(async function(snapshots) {
+                            if (!snapshots.empty) {
+                                snapshots.docs.forEach((listval) => {
+                                    var data = listval.data();
+                                    if (data.id == product.brandID) {
+                                        $('#brand').append($("<option selected></option>")
+                                            .attr("value", data.id)
+                                            .text(data.title));
+                                    } else {
+                                        $('#brand').append($("<option></option>")
+                                            .attr("value", data.id)
+                                            .text(data.title));
+                                    }
+                                });
+                                $('#brand').val(product.brandID);
+                            }
+                        });
                     }
-
-                    if (section_id != undefined && section_id != '') {
-
-                        vendor_categories = await database.collection('vendor_categories').where('section_id', '==', section_id);
-                        brand = database.collection('brands').where('sectionId', '==', vendorData.section_id).get();
-                    } else {
-
-                        vendor_categories = await database.collection('vendor_categories');
-                        var brand = database.collection('brands');
-                    }
-
-                    vendor_categories = vendor_categories.where('publish', '==', true).get();
-
-                    vendor_categories.then(async function(snapshots) {
-
-                        snapshots.docs.forEach((listval) => {
-                            var data = listval.data();
-                            categories_list.push(data);
-                        });
-                        var categoryIDs = []
-                        categoryIDs = vendorData.categoryID;
-                        categories_list.forEach((val) => {
-                            if (categoryIDs.includes(val.id)) {
-                                $('#item_category').append($("<option></option>")
-                                    .attr("value", val.id)
-                                    .text(val.title));
-                            }
-                        })
-                        $('#item_category').val(product.categoryID);
-                    });
-
-                    await brand.then(async function(snapshots) {
-                        snapshots.docs.forEach((listval) => {
-                            var data = listval.data();
-                            if (data.id == product.brandID) {
-                                $('#brand').append($("<option selected></option>")
-                                    .attr("value", data.id)
-                                    .text(data.title));
-                            } else {
-                                $('#brand').append($("<option></option>")
-                                    .attr("value", data.id)
-                                    .text(data.title));
-                            }
-                        });
-                        $('#brand').val(product.brandID);
-                    });
                 });
 
                 var selected_attributes = [];
@@ -570,18 +578,22 @@
                     }
                 });
 
-                database.collection('sections').doc(section_id).get().then(async function(snapshots) {
-                    var data = snapshots.data();
-                    if (data.serviceTypeFlag == "ecommerce-service" || data.serviceTypeFlag == "delivery-service") {
-                        $("#attributes_div").show();
-                        $("#item_attribute_chosen").css({
-                            'width': '100%'
-                        });
-                    } else {
-                        $("#attributes_div").remove();
-                        $("#attributes_div_values").remove();
-                    }
-                });
+                if (section_id) {
+                    database.collection('sections').doc(section_id).get().then(async function(snapshots) {
+                        if (snapshots.exists) {
+                            var data = snapshots.data();
+                            if (data.serviceTypeFlag == "ecommerce-service" || data.serviceTypeFlag == "delivery-service") {
+                                $("#attributes_div").show();
+                                $("#item_attribute_chosen").css({
+                                    'width': '100%'
+                                });
+                            } else {
+                                $("#attributes_div").remove();
+                                $("#attributes_div_values").remove();
+                            }
+                        }
+                    });
+                }
 
                 photo = product.photo;
                 $(".item_name").val(product.name);
@@ -851,7 +863,55 @@
                                 'isDigitalProduct': is_digital_product,
                                 'digitalProduct': DigitalImg ? DigitalImg : '',
                             }).then(function(result) {
-                                window.location.href = '{{ route('items') }}';
+                                $.ajax({
+                                    url: '{{ route('items.sync') }}',
+                                    type: 'POST',
+                                    data: {
+                                        'name': name,
+                                        'price': price,
+                                        'quantity': parseInt(item_quantity),
+                                        'disPrice': discount,
+                                        'categoryID': category,
+                                        'brandID': brand,
+                                        'photo': photo,
+                                        'photos': IMG,
+                                        'calories': itemCalories,
+                                        'grams': itemGrams,
+                                        'proteins': itemProteins,
+                                        'fats': itemFats,
+                                        'description': description,
+                                        'publish': itemPublish,
+                                        'section_id': section_id,
+                                        'nonveg': nonveg,
+                                        'veg': veg,
+                                        'addOnsTitle': addOnesTitle,
+                                        'addOnsPrice': addOnesPrice,
+                                        'takeawayOption': itemTakeaway,
+                                        'id': productId,
+                                        'item_attribute': item_attribute,
+                                        'product_specification': product_specification,
+                                        'isDigitalProduct': is_digital_product,
+                                        'digitalProduct': DigitalImg ? DigitalImg : '',
+                                    },
+                                    success: function(response) {
+                                        if (response.success) {
+                                            window.location.href = '{{ route('items') }}';
+                                        } else {
+                                            jQuery("#data-table_processing").hide();
+                                            $(".error_top").show().html("<p>" + response.message + "</p>");
+                                            window.scrollTo(0, 0);
+                                        }
+                                    },
+                                    error: function(xhr) {
+                                        jQuery("#data-table_processing").hide();
+                                        var msg = "Error syncing with external API";
+                                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                                            msg = xhr.responseJSON.message;
+                                        }
+                                        $(".error_top").show().html("<p>" + msg + "</p>");
+                                        window.scrollTo(0, 0);
+                                    }
+                                });
                             });
                         }).catch(err => {
                             jQuery("#data-table_processing").hide();
