@@ -555,8 +555,10 @@
         var scheduleOrderNotificationRef = database.collection('settings').doc("scheduleOrderNotification");
         scheduleOrderNotificationRef.get().then(async function(snapshot) {
             var data = snapshot.data();
-            scheduleOrderAcceptData.notifyTime = data.notifyTime;
-            scheduleOrderAcceptData.timeUnit = data.timeUnit;
+            if (data) {
+                scheduleOrderAcceptData.notifyTime = data.notifyTime;
+                scheduleOrderAcceptData.timeUnit = data.timeUnit;
+            }
         })
         var refGlobal = database.collection('settings').doc("globalSettings");
         refGlobal.get().then(async function(
@@ -644,15 +646,7 @@
             $(document.body).on('click', '#save_btn', function() {
                 var courierCompanyName = $("#courierCompanyName").val();
                 var courierTrackingId = $("#courierTrackingId").val();
-                if (courierCompanyName == '') {
-                    alert('{{ trans('lang.courier_company_name_error') }}');
-                    return false;
-                }
-                if (courierTrackingId == '') {
-                    alert('{{ trans('lang.courier_tracking_id_error') }}');
-                    return false;
-                }
-                status = "In Transit";
+                status = "Order Accepted";
                 callWalletTransaction(status);
             });
             jQuery("#data-table_processing").show();
@@ -1190,6 +1184,10 @@
                     },
                     success: function(data) {
                         window.location.href = '{{ route('orders') }}';
+                    },
+                    error: function(xhr) {
+                        console.error('order-status-notification error:', xhr.responseText);
+                        window.location.href = '{{ route('orders') }}';
                     }
                 });
             }
@@ -1271,11 +1269,7 @@
                                         $('#addPreparationTimeModal').modal('show');
                                     }
                                 } else {
-                                    if (service_type == "ecommerce-service") {
-                                        $("#orderTrakingModal").modal('show');
-                                    } else {
-                                        callWalletTransaction(orderStatus);
-                                    }
+                                    callWalletTransaction(orderStatus);
                                 }
                             }
                         })
@@ -1877,6 +1871,7 @@
             return html;
         }
         function getProductInfo(product) {
+            if (!product.id) return;
             database.collection('vendor_products').doc(product.id).get().then(async function(snapshots) {
                 if (snapshots.exists) {
                     var productData = snapshots.data();

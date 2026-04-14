@@ -615,6 +615,15 @@
             });
 
 
+            // Yangi order ovozi
+            var _orderAudio = new Audio('{{ asset('sounds/order_notification.mp3') }}');
+            function playOrderSound() {
+                try {
+                    _orderAudio.currentTime = 0;
+                    _orderAudio.play().catch(function(e) { console.log('Audio play error:', e); });
+                } catch(e) { console.log('Audio error:', e); }
+            }
+
             var pageloadded = 0;
             database.collection('vendor_orders').where('vendor.author', "==", cuser_id).onSnapshot(function(doc) {
                 if (pageloadded) {
@@ -623,7 +632,7 @@
                         if (section_id == val.section_id) {
                             if (change.type == "added") {
                                 if (val.status == "Order Placed") {
-
+                                    playOrderSound();
                                     if (val.scheduleTime != undefined && val.scheduleTime != null && val
                                         .scheduleTime != '') {
                                         $('.order_subject').text(scheduleOrderPlacedSubject);

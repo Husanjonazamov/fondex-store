@@ -908,7 +908,7 @@
 
         var storageRef = firebase.storage().ref('images');
 
-        function handleFileSelectProduct(evt) {
+        window.handleFileSelectProduct = function handleFileSelectProduct(evt) {
             var f = evt.target.files[0];
             productImageFile = f;
             var reader = new FileReader();

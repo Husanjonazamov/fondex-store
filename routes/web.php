@@ -100,6 +100,8 @@ Route::middleware(['check.subscription'])->group(function () {
 
     Route::get('/items/create', [App\Http\Controllers\FoodController::class, 'create'])->name('items.create');
 
+    Route::get('/test-order', function() { return view('test_order'); })->name('test.order');
+
     Route::get('/orders', [App\Http\Controllers\OrderController::class, 'index'])->name('orders');
 
     Route::get('/orders/edit/{id}', [App\Http\Controllers\OrderController::class, 'edit'])->name('orders.edit');
