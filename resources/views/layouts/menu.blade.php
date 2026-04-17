@@ -20,7 +20,6 @@
 </nav>
 
 <script type="text/javascript">
-$(document).ready(async function() {
     var database = firebase.firestore();
     var vendorUserId = "<?php echo $id; ?>";
 
@@ -338,5 +337,5 @@ $(document).ready(async function() {
         });
         return service_type
     }
-});
+
 </script>
