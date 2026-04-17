@@ -147,7 +147,14 @@ class IntegrationController extends Controller
             $allResults = [];
             // If the frontend passed a specific next_url (cursor), use it. Otherwise start from page 1.
             $url = $request->next_url ?: ($this->apiUrl . '/products/');
-            $params = $request->next_url ? [] : ['vendor' => $firestoreVendorId, 'limit' => 20];
+            $params = [];
+            if (!$request->next_url) {
+                $params['vendor'] = $firestoreVendorId;
+                $params['limit'] = 20;
+                if ($request->search) {
+                    $params['search'] = $request->search;
+                }
+            }
 
             \Log::info('getProducts starting fetch', ['url' => $url, 'params' => $params]);
 

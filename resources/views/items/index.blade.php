@@ -209,56 +209,67 @@
 
             var totalFetched = 0;
             var categoryMap = {};
+            var searchTimeout = null;
+            var currentSearch = '';
 
-            function fetchItems(nextUrl = null) {
+            function fetchItems(nextUrl = null, searchQuery = '') {
                 jQuery("#data-table_processing").show();
                 
                 $.ajax({
                     url: '{{ route('items.fetch') }}',
                     type: 'GET',
-                    data: { next_url: nextUrl },
+                    data: { 
+                        next_url: nextUrl,
+                        search: searchQuery
+                    },
                     dataType: 'json',
                     success: async function(response) {
-                        if (response.error === 'vendor_not_synced') {
-                            setTimeout(function() { window.location.reload(); }, 5000);
-                            return;
-                        }
+                        try {
+                            if (response.error === 'vendor_not_synced') {
+                                setTimeout(function() { window.location.reload(); }, 5000);
+                                return;
+                            }
 
-                        var items = (response.data && response.data.results) ? response.data.results : (response.results || []);
-                        
-                        // Fetch missing categories from Firestore
-                        var categoryIds = [...new Set(items.map(i => i.categoryID).filter(id => id && !categoryMap[id]))];
-                        if (categoryIds.length > 0) {
-                            try {
-                                const catSnap = await database.collection('vendor_categories').where('id', 'in', categoryIds.slice(0, 10)).get();
-                                catSnap.forEach(d => { categoryMap[d.data().id] = d.data().title || d.data().name; });
-                            } catch (e) {}
-                        }
-
-                        var newRows = [];
-                        items.forEach(function(item) {
-                            var finalPrice = (item.disPrice && item.disPrice != '0') ? item.disPrice : item.price;
-                            var createdAt = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
-                            var routeEdit = '{{ route('items.edit', ':id') }}'.replace(':id', item.id);
+                            var items = (response.data && response.data.results) ? response.data.results : (response.results || []);
                             
-                            var img = '<img class="rounded" style="width:50px" src="' + (item.photo || placeholderImage) + '" onerror="this.src=\'' + placeholderImage + '\'">';
-                            var nameCol = img + '<a href="' + routeEdit + '" class="left_space">' + (item.name || '') + '</a>';
-                            var catName = categoryMap[item.categoryID] || item.category || 'N/A';
-                            var pubCol = (item.publish === 'Yes' || item.publish === true) ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>';
-                            var actCol = '<span class="action-btn"><a href="' + routeEdit + '"><i class="mdi mdi-lead-pencil"></i></a><a id="' + item.id + '" name="item-delete" href="javascript:void(0)"><i class="mdi mdi-delete"></i></a></span>';
+                            // Fetch missing categories from Firestore
+                            var categoryIds = [...new Set(items.map(i => i.categoryID).filter(id => id && !categoryMap[id]))];
+                            if (categoryIds.length > 0) {
+                                try {
+                                    const catSnap = await database.collection('vendor_categories').where('id', 'in', categoryIds.slice(0, 10)).get();
+                                    catSnap.forEach(d => { categoryMap[d.data().id] = d.data().title || d.data().name; });
+                                } catch (e) { console.error('Firestore cat fetch error:', e); }
+                            }
 
-                            newRows.push([nameCol, finalPrice, catName, pubCol, createdAt, actCol]);
-                        });
+                            var newRows = [];
+                            items.forEach(function(item) {
+                                var finalPrice = (item.disPrice && item.disPrice != '0') ? item.disPrice : item.price;
+                                var createdAt = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
+                                var routeEdit = '{{ route('items.edit', ':id') }}'.replace(':id', item.id);
+                                
+                                var imgUrl = item.photo || placeholderImage;
+                                var img = '<img class="rounded" style="width:50px" src="' + imgUrl + '" onerror="this.src=\'' + placeholderImage + '\'">';
+                                var nameCol = img + '<a href="' + routeEdit + '" class="left_space">' + (item.name || '') + '</a>';
+                                var catName = categoryMap[item.categoryID] || item.category || 'N/A';
+                                var pubCol = (item.publish === 'Yes' || item.publish === true) ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>';
+                                var actCol = '<span class="action-btn"><a href="' + routeEdit + '"><i class="mdi mdi-lead-pencil"></i></a><a id="' + item.id + '" name="item-delete" href="javascript:void(0)"><i class="mdi mdi-delete"></i></a></span>';
 
-                        itemTable.rows.add(newRows).draw(false);
-                        totalFetched += items.length;
-                        $('.total_count').text(totalFetched);
+                                newRows.push([nameCol, finalPrice, catName, pubCol, createdAt, actCol]);
+                            });
 
-                        if (response.next_url) {
-                            $('.food-limit-note').text('Loading more products... (' + totalFetched + ' items fetched)');
-                            fetchItems(response.next_url); // Recursive call for next page
-                        } else {
-                            $('.food-limit-note').text('Total ' + totalFetched + ' products loaded.');
+                            itemTable.rows.add(newRows).draw(false);
+                            totalFetched += items.length;
+                            $('.total_count').text(totalFetched);
+
+                            if (response.next_url) {
+                                $('.food-limit-note').text('Loading more products... (' + totalFetched + ' items fetched)');
+                                fetchItems(response.next_url, searchQuery); 
+                            } else {
+                                $('.food-limit-note').text('Total ' + totalFetched + ' products loaded.');
+                                jQuery("#data-table_processing").hide();
+                            }
+                        } catch (err) {
+                            console.error('Success handler Error:', err);
                             jQuery("#data-table_processing").hide();
                         }
                     },
@@ -269,7 +280,21 @@
                 });
             }
 
-            // Start the fetching process
+            // Hook into DataTable search box to trigger API-side search
+            $('.dataTables_filter input').unbind().bind('keyup', function(e) {
+                var searchTerm = $(this).val();
+                if (searchTerm === currentSearch) return;
+                
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(function() {
+                    currentSearch = searchTerm;
+                    totalFetched = 0;
+                    itemTable.clear().draw();
+                    fetchItems(null, currentSearch);
+                }, 700); // 700ms debounce
+            });
+
+            // Start the initial fetching process
             fetchItems();
         })
 
