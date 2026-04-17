@@ -14,7 +14,7 @@ class SmsServices
 
         try {
             $service->sendSms($to, $sms);
-            Log::info('OTP sent successfully', ['phone' => $to]);
+            Log::info('OTP sent successfully', ['phone' => $to, 'otp' => $code]);
         } catch (\Exception $e) {
             Log::error('OTP sending failed', [
                 'phone' => $to,
