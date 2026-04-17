@@ -72,17 +72,7 @@
     </ul>
 </div>
 
-<script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-firestore.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-storage.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-database.js"></script>
-<script src="{{ asset('js/geofirestore.js') }}"></script>
-<script src="https://cdn.firebase.com/libs/geofire/5.0.1/geofire.min.js"></script>
-<script src="{{ asset('js/crypto-js.js') }}"></script>
-<script src="{{ asset('js/jquery.cookie.js') }}"></script>
-<script src="{{ asset('js/jquery.validate.js') }}"></script>
+
 <script>
     var doNotDeleteAlert = "This is for demo, We can not allow to delete";
 

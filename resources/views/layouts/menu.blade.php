@@ -19,19 +19,8 @@
 
 </nav>
 
-<script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-firestore.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-storage.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-database.js"></script>
-<script src="{{ asset('js/geofirestore.js') }}"></script>
-<script src="https://cdn.firebase.com/libs/geofire/5.0.1/geofire.min.js"></script>
-<script src="{{ asset('js/crypto-js.js') }}"></script>
-<script src="{{ asset('js/jquery.cookie.js') }}"></script>
-<script src="{{ asset('js/jquery.validate.js') }}"></script>
-
 <script type="text/javascript">
+$(document).ready(async function() {
     var database = firebase.firestore();
     var vendorUserId = "<?php echo $id; ?>";
 
@@ -117,7 +106,7 @@
         });
     database.collection('settings').doc("document_verification_settings").get().then(async function(snapshots) {
         var documentVerification = snapshots.data();
-        if (documentVerification.isStoreVerification) {
+        if (snapshots.exists && documentVerification.isStoreVerification) {
             documentVerificationEnable = true;
             var newLi = `
                 <li class="{{ request()->routeIs('vendors.document') ? 'active' : '' }}">
@@ -200,7 +189,7 @@
                                         <i class="mdi mdi-shopping"></i>
                                         <span class="hide-menu">{{ trans('lang.item_plural') }}</span>
                                     </a>
-                                </li>
+                                 </li>
                         <li class="{{ request()->routeIs('orders') ? 'active' : '' }}">
                             <a class="waves-effect waves-dark" href="{!! url('orders') !!}" aria-expanded="false">
                                 <i class="mdi mdi-reorder-horizontal"></i>
@@ -221,15 +210,15 @@
                 var dropdownShow = (pendingActive || listActive) ? 'show' : '';
                 var ariaExpanded = (pendingActive || listActive) ? 'true' : 'false';
                 newLi += `<li class="${adsParentActive}"><a class="has-arrow waves-effect waves-dark" href="#"
-                                                    data-toggle="collapse" data-target="#adsDropdown" aria-expanded="${ariaExpanded}">
-                                                    <i class="mdi mdi-newspaper"></i>
-                                                    <span class="hide-menu">{{ trans('lang.advertisement_plural') }}</span>
-                                                </a>
-                                                <ul id="adsDropdown" aria-expanded="false" class="collapse ${dropdownShow}">
-                                                    <li class="${pendingActive}"><a class="${pendingActive}" href="{!! url('advertisements/pending') !!}">{{ trans('lang.pending') }}</a></li>
-                                                    <li class="${listActive}"><a class="${listActive}" href="{!! url('advertisements') !!}">{{ trans('lang.ads_list') }}</a></li>
-                                                </ul>
-                                            </li>`;
+                                                     data-toggle="collapse" data-target="#adsDropdown" aria-expanded="${ariaExpanded}">
+                                                     <i class="mdi mdi-newspaper"></i>
+                                                     <span class="hide-menu">{{ trans('lang.advertisement_plural') }}</span>
+                                                 </a>
+                                                 <ul id="adsDropdown" aria-expanded="false" class="collapse ${dropdownShow}">
+                                                     <li class="${pendingActive}"><a class="${pendingActive}" href="{!! url('advertisements/pending') !!}">{{ trans('lang.pending') }}</a></li>
+                                                     <li class="${listActive}"><a class="${listActive}" href="{!! url('advertisements') !!}">{{ trans('lang.ads_list') }}</a></li>
+                                                 </ul>
+                                             </li>`;
             }
 
             if (enableSelfDelivery && service_type == 'Multivendor Delivery Service') {
@@ -257,11 +246,11 @@
             if (dineIn) {
 
                 newLi += `<li class="dineInHistory {{ request()->routeIs('booktable') ? 'active' : '' }}"><a class="waves-effect waves-dark"
-                                                    href="{!! url('booktable') !!}" aria-expanded="false">
-                                                    <i class="fa fa-table "></i>
-                                                    <span class="hide-menu">DINE IN Booking History</span>
-                                                </a>
-                                            </li>`;
+                                                     href="{!! url('booktable') !!}" aria-expanded="false">
+                                                     <i class="fa fa-table "></i>
+                                                     <span class="hide-menu">DINE IN Booking History</span>
+                                                 </a>
+                                             </li>`;
             }
 
         }
@@ -334,17 +323,20 @@
         var sectionsRef = database.collection('sections').where('id', '==', section_id);
 
         await sectionsRef.get().then(async function(snapshots) {
-            var datas = snapshots.docs[0].data();
-            service_type = datas.serviceType;
-            var enabledDiveInFuture = datas.dine_in_active;
-            if (enabledDiveInFuture) {
-                dineIn = true;
-            }
-            var commissionSetting = datas.adminCommision;
-            if (commissionSetting.enable == true) {
-                commisionModel = true;
+            if (!snapshots.empty) {
+                var datas = snapshots.docs[0].data();
+                service_type = datas.serviceType;
+                var enabledDiveInFuture = datas.dine_in_active;
+                if (enabledDiveInFuture) {
+                    dineIn = true;
+                }
+                var commissionSetting = datas.adminCommision;
+                if (commissionSetting && commissionSetting.enable == true) {
+                    commisionModel = true;
+                }
             }
         });
         return service_type
     }
+});
 </script>
