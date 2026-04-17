@@ -113,7 +113,7 @@ class FirestoreHelper
         return Cache::remember("firestore_doc_{$path}", 300, function() use ($path) {
             try {
                 $url = self::baseUrl() . "/{$path}";
-                $response = Http::timeout(5)->get($url);
+                $response = Http::timeout(3)->get($url);
 
                 if (!$response->successful()) return null;
 
@@ -138,13 +138,17 @@ class FirestoreHelper
 
             $data = $response->json();
 
-        $documents = [];
-        foreach ($data['documents'] ?? [] as $document) {
-            $fields = $document['fields'] ?? [];
-            $documents[] = self::decodeFields($fields);
-        }
+            $documents = [];
+            foreach ($data['documents'] ?? [] as $document) {
+                $fields = $document['fields'] ?? [];
+                $documents[] = self::decodeFields($fields);
+            }
 
-        return $documents;
+            return $documents;
+        } catch (\Exception $e) {
+            logger()->error("Firestore getCollection failed for {$collection}", ['error' => $e->getMessage()]);
+            return [];
+        }
     }
 
     /** Get document using query clean array */

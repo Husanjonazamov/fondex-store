@@ -149,10 +149,10 @@ class IntegrationController extends Controller
             $params = ['vendor' => $firestoreVendorId, 'limit' => 100];
 
             $pageCount = 0;
-            // Fetch all pages (capped at 10 pages / 1000 items to prevent 504)
-            while ($url && $pageCount < 10) {
+            // Fetch up to 4 pages (400 items) with 8s timeout each to stay within 60s Nginx limit
+            while ($url && $pageCount < 4) {
                 $pageCount++;
-                $response = Http::timeout(20)->get($url, $params);
+                $response = Http::timeout(8)->get($url, $params);
                 \Log::info('getProducts API call', ['url' => $url, 'status' => $response->status(), 'body_preview' => substr($response->body(), 0, 800)]);
                 if (!$response->successful()) break;
 
@@ -224,6 +224,7 @@ class IntegrationController extends Controller
      */
     public function getCategories(Request $request)
     {
+        session_write_close();
         try {
             $response = Http::get($this->apiUrl . '/categories');
 
