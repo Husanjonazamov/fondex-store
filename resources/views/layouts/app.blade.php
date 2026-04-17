@@ -33,7 +33,25 @@
         <link href="https://fonts.googleapis.com/css2?family=Urbanist:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
         <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
 
+        <!-- CORE SCRIPTS -->
+        <script src="{{ asset('assets/plugins/jquery/jquery.min.js') }}"></script>
+        <script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-app.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-firestore.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-storage.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-auth.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-database.js"></script>
+        <script src="https://cdn.firebase.com/libs/geofire/5.0.1/geofire.min.js"></script>
+        <script src="{{ asset('js/geofirestore.js') }}"></script>
+        <script src="{{ asset('js/crypto-js.js') }}"></script>
+        <script src="{{ asset('js/jquery.cookie.js') }}"></script>
+        <script src="{{ asset('js/jquery.validate.js') }}"></script>
+        <script type="text/javascript">
+            var database = firebase.firestore();
+        </script>
+
+
         <!-- Datatable css -->
+
 
         <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
         <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/2.2.3/css/buttons.dataTables.min.css">
@@ -459,7 +477,7 @@
                 </div>
             </div>
         </div>
-        <script src="{{ asset('assets/plugins/jquery/jquery.min.js') }}"></script>
+
         <script src="{{ asset('assets/plugins/bootstrap/js/popper.min.js') }}"></script>
         <script src="{{ asset('assets/plugins/bootstrap/js/bootstrap.min.js') }}"></script>
         <script src="{{ asset('js/jquery.slimscroll.js') }}"></script>
@@ -498,18 +516,9 @@
             });
         </script>
 
-        <script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-app.js"></script>
-        <script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-firestore.js"></script>
-        <script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-storage.js"></script>
-        <script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-auth.js"></script>
-        <script src="https://www.gstatic.com/firebasejs/7.2.0/firebase-database.js"></script>
-        <script src="https://cdn.firebase.com/libs/geofire/5.0.1/geofire.min.js"></script>
-        <script src="{{ asset('js/geofirestore.js') }}"></script>
         <script src="{{ asset('js/chosen.jquery.js') }}"></script>
         <script src="{{ asset('js/bootstrap-tagsinput.js') }}"></script>
-        <script src="{{ asset('js/crypto-js.js') }}"></script>
-        <script src="{{ asset('js/jquery.cookie.js') }}"></script>
-        <script src="{{ asset('js/jquery.validate.js') }}"></script>
+
 
         @yield('scripts')
 
@@ -518,7 +527,7 @@
             var booktable = '{{ route('booktable.edit', ':id') }}';
 
             var languages_list_main = [];
-            var database = firebase.firestore();
+
 
             var version = database.collection('settings').doc("Version");
 
