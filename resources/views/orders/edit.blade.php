@@ -284,7 +284,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title locationModalTitle">{{ trans('lang.assign_order') }}</h5>
-                    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
@@ -315,7 +315,7 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-primary" id="order-assign-btn">{{ trans('lang.assign') }}
                         </button>
-                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" aria-label="Close">
+                        <button type="button" class="btn btn-primary" data-dismiss="modal" aria-label="Close">
                             {{ trans('close') }}
                         </button>
                     </div>
@@ -395,7 +395,7 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-primary" id="add-deliveryman-btn">{{ trans('submit') }}</a>
                         </button>
-                        <button type="button" class="btn btn-primary"  data-bs-dismiss="modal" aria-label="Close">{{ trans('close') }}</a>
+                        <button type="button" class="btn btn-primary"  data-dismiss="modal" aria-label="Close">{{ trans('close') }}</a>
                         </button>
                     </div>
                 </div>
@@ -1834,7 +1834,8 @@
                         '<div class="type"><span>{{ trans('lang.type') }} :</span><span class="ext-size">' +
                         product.size + '</span></div>';
                 }
-                price_item = parseFloat(val.price).toFixed(decimal_degits);
+                var effectivePrice = (val.disPrice && parseFloat(val.disPrice) > 0) ? val.disPrice : val.price;
+                price_item = parseFloat(effectivePrice).toFixed(decimal_degits);
                 totalProductPrice = parseFloat(price_item) * parseInt(val.quantity);
                 var extras_price = 0;
                 if (product.extras != undefined && product.extras != '' && product.extras.length > 0) {

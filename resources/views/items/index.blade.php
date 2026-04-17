@@ -197,6 +197,18 @@
                     var items = (response.data && response.data.results) ? response.data.results : (response.results || []);
                     console.log('Items count:', items.length);
 
+                    // Collect unique categoryIDs and fetch names from Firestore
+                    var categoryIds = [...new Set(items.map(function(i){ return i.categoryID; }).filter(Boolean))];
+                    var categoryMap = {};
+
+                    var fetchCats = categoryIds.length > 0
+                        ? database.collection('vendor_categories').where('id', 'in', categoryIds.slice(0,10)).get()
+                              .then(function(snap){ snap.forEach(function(d){ categoryMap[d.data().id] = d.data().title || d.data().name || d.data().id; }); })
+                              .catch(function(){ })
+                        : Promise.resolve();
+
+                    fetchCats.then(function() {
+
                     // Build table rows
                     var rows = [];
                     items.forEach(function(item) {
@@ -218,7 +230,8 @@
                             : '<img class="rounded" style="width:50px" src="' + placeholderImage + '">';
                         var nameCol   = img + '<a href="' + route1 + '" class="left_space redirecttopage" data-url="' + route1 + '">' + (item.name || '') + '</a>';
                         var priceCol  = finalPrice || 0;
-                        var catCol    = '<span class="category_' + (item.categoryID||'') + '">' + (item.category || item.categoryID || '') + '</span>';
+                        var catName   = (item.categoryID && categoryMap[item.categoryID]) ? categoryMap[item.categoryID] : (item.category || item.categoryID || '');
+                        var catCol    = '<span class="category_' + (item.categoryID||'') + '">' + catName + '</span>';
                         var pubCol    = item.publish === 'Yes' ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>';
                         var actCol    = '<span class="action-btn"><a href="' + route1 + '"><i class="mdi mdi-lead-pencil"></i></a><a id="' + item.id + '" name="item-delete" href="javascript:void(0)"><i class="mdi mdi-delete"></i></a></span>';
 
@@ -281,6 +294,7 @@
                             }).remove();
                         }
                     });
+                    }); // end fetchCats.then
                 },
                 error: function(xhr, status, err) {
                     console.error('items.fetch FAILED:', status, err, xhr.responseText);

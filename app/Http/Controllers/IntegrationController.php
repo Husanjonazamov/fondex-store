@@ -70,9 +70,35 @@ class IntegrationController extends Controller
             }
 
             $client = new \GuzzleHttp\Client(['verify' => false]);
-            $guzzleResponse = $client->post($this->apiUrl . '/products/', [
-                'multipart' => $fields,
-            ]);
+
+            // If backend_id provided use PATCH (update), otherwise POST (create)
+            $backendId = $request->backend_id ?? null;
+
+            // If no backend_id, try to find existing product by firestore_id
+            if (empty($backendId) && !empty($request->id)) {
+                try {
+                    $lookup = $client->get($this->apiUrl . '/products/', [
+                        'query' => ['firestore_id' => $request->id, 'vendor' => $vendorFirestoreId],
+                    ]);
+                    $lookupData = json_decode($lookup->getBody()->getContents(), true);
+                    $existing = $lookupData['data']['results'] ?? $lookupData['results'] ?? [];
+                    if (!empty($existing)) {
+                        $backendId = $existing[0]['id'] ?? null;
+                    }
+                } catch (\Exception $e) {
+                    \Log::warning('syncProduct lookup failed', ['error' => $e->getMessage()]);
+                }
+            }
+
+            if (!empty($backendId)) {
+                $guzzleResponse = $client->patch($this->apiUrl . '/products/' . $backendId . '/', [
+                    'multipart' => $fields,
+                ]);
+            } else {
+                $guzzleResponse = $client->post($this->apiUrl . '/products/', [
+                    'multipart' => $fields,
+                ]);
+            }
 
             $rawBody = $guzzleResponse->getBody()->getContents();
             \Log::info('syncProduct backend response', ['status' => $guzzleResponse->getStatusCode(), 'body' => $rawBody]);
