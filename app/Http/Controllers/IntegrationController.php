@@ -145,30 +145,22 @@ class IntegrationController extends Controller
             }
 
             $allResults = [];
-            $url = $this->apiUrl . '/products/';
-            $params = ['vendor' => $firestoreVendorId, 'limit' => 100];
+            // If the frontend passed a specific next_url (cursor), use it. Otherwise start from page 1.
+            $url = $request->next_url ?: ($this->apiUrl . '/products/');
+            $params = $request->next_url ? [] : ['vendor' => $firestoreVendorId, 'limit' => 20];
 
-            $pageCount = 0;
-            // Fetch up to 4 pages (400 items) with 8s timeout each to stay within 60s Nginx limit
-            while ($url && $pageCount < 4) {
-                $pageCount++;
-                $response = Http::timeout(8)->get($url, $params);
-                \Log::info('getProducts API call', ['url' => $url, 'status' => $response->status(), 'body_preview' => substr($response->body(), 0, 800)]);
-                if (!$response->successful()) break;
+            \Log::info('getProducts starting fetch', ['url' => $url, 'params' => $params]);
 
-                $json = $response->json();
-                $results = $json['data']['results'] ?? $json['results'] ?? [];
-                $allResults = array_merge($allResults, $results);
-
-                // Next page (cursor-based pagination)
-                $nextUrl = $json['data']['next'] ?? null;
-                if ($nextUrl && $nextUrl !== $url) {
-                    $url = $nextUrl;
-                    $params = []; // params already in the next URL
-                } else {
-                    $url = null;
-                }
+            $response = Http::timeout(10)->get($url, $params);
+            
+            if (!$response->successful()) {
+                return response()->json(['success' => false, 'message' => 'Remote API Error'], $response->status());
             }
+
+            $json = $response->json();
+            $results = $json['data']['results'] ?? $json['results'] ?? [];
+            $allResults = $results;
+            $nextUrl = $json['data']['next'] ?? null;
 
             // Normalize field names for the frontend
             $normalized = array_map(function ($item) {
@@ -191,8 +183,10 @@ class IntegrationController extends Controller
             }, $allResults);
 
             return response()->json([
-                'data'    => ['results' => $normalized],
-                'results' => $normalized,
+                'data'       => ['results' => $normalized],
+                'results'    => $normalized,
+                'next_url'   => $nextUrl,
+                'is_loading' => !empty($nextUrl)
             ]);
 
         } catch (Exception $e) {
