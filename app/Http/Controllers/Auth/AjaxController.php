@@ -197,6 +197,7 @@ class AjaxController extends Controller
     public function setSubcriptionFlag(Request $request)
 
     {
+        session_write_close();
 
         User::where('email', $request->email)->update([
 

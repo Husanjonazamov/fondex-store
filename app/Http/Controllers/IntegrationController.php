@@ -119,6 +119,7 @@ class IntegrationController extends Controller
      */
     public function getProducts(Request $request)
     {
+        session_write_close();
         try {
             $user = Auth::user();
             $vendorUser = VendorUsers::where('user_id', $user->id)->first();
@@ -147,9 +148,11 @@ class IntegrationController extends Controller
             $url = $this->apiUrl . '/products/';
             $params = ['vendor' => $firestoreVendorId, 'limit' => 100];
 
-            // Fetch all pages
-            while ($url) {
-                $response = Http::timeout(15)->get($url, $params);
+            $pageCount = 0;
+            // Fetch all pages (capped at 10 pages / 1000 items to prevent 504)
+            while ($url && $pageCount < 10) {
+                $pageCount++;
+                $response = Http::timeout(20)->get($url, $params);
                 \Log::info('getProducts API call', ['url' => $url, 'status' => $response->status(), 'body_preview' => substr($response->body(), 0, 800)]);
                 if (!$response->successful()) break;
 
@@ -175,7 +178,7 @@ class IntegrationController extends Controller
                     'name'        => $item['name'] ?? '',
                     'price'       => $item['price'] ?? 0,
                     'disPrice'    => $item['discount_price'] ?? '0',
-                    'photo'       => $item['image'] ?? '',
+                    'photo'       => !empty($item['image']) ? str_replace('http://', 'https://', $item['image']) : '',
                     'photos'      => $item['images'] ?? [],
                     'vendorID'    => $item['vendor'] ?? '',
                     'categoryID'  => $item['category'] ?? '',

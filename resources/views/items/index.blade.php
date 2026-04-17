@@ -189,13 +189,25 @@
                     console.log('items.fetch OK:', JSON.stringify(response).substring(0, 300));
 
                     if (response.error === 'vendor_not_synced') {
-                        console.warn('vendor_not_synced, reloading...');
-                        setTimeout(function() { window.location.reload(); }, 2000);
+                        console.warn('vendor_not_synced, checking again in 5s...');
+                        setTimeout(function() { window.location.reload(); }, 5000);
                         return;
                     }
 
                     var items = (response.data && response.data.results) ? response.data.results : (response.results || []);
                     console.log('Items count:', items.length);
+
+                    if (items.length === 0) {
+                        jQuery("#data-table_processing").hide();
+                        $('#itemTable').DataTable({
+                            pageLength: 10,
+                            "language": {
+                                "zeroRecords": "{{ trans('lang.no_record_found') }}",
+                                "emptyTable": "{{ trans('lang.no_record_found') }}"
+                            }
+                        });
+                        return;
+                    }
 
                     // Collect unique categoryIDs and fetch names from Firestore
                     var categoryIds = [...new Set(items.map(function(i){ return i.categoryID; }).filter(Boolean))];
@@ -299,6 +311,11 @@
                 error: function(xhr, status, err) {
                     console.error('items.fetch FAILED:', status, err, xhr.responseText);
                     jQuery("#data-table_processing").hide();
+                    if (xhr.status == 504) {
+                        alert("The server is taking too long to respond (504 Gateway Time-out). Please refresh the page in a few moments.");
+                    } else {
+                        alert("Failed to fetch products. Please check the console for details.");
+                    }
                 }
             });
         })
