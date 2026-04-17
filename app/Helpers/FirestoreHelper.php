@@ -3,6 +3,8 @@
 namespace App\Helpers;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
+
 
 class FirestoreHelper
 {
@@ -108,25 +110,33 @@ class FirestoreHelper
     /** Get document as clean array */
     public static function getDocument($path)
     {
-        $url = self::baseUrl() . "/{$path}";
-        $response = Http::get($url);
+        return Cache::remember("firestore_doc_{$path}", 300, function() use ($path) {
+            try {
+                $url = self::baseUrl() . "/{$path}";
+                $response = Http::timeout(5)->get($url);
 
-        if (!$response->successful()) return null;
+                if (!$response->successful()) return null;
 
-        $data = $response->json();
+                $data = $response->json();
 
-        return isset($data['fields']) ? self::decodeFields($data['fields']) : null;
+                return isset($data['fields']) ? self::decodeFields($data['fields']) : null;
+            } catch (\Exception $e) {
+                logger()->error("Firestore getDocument failed for {$path}", ['error' => $e->getMessage()]);
+                return null;
+            }
+        });
     }
 
     /** Get all documents using collection clean array */
     public static function getCollection($collection)
     {
-        $url = self::baseUrl() . "/{$collection}";
-        $response = Http::get($url);
+        try {
+            $url = self::baseUrl() . "/{$collection}";
+            $response = Http::timeout(10)->get($url);
 
-        if (!$response->successful()) return [];
+            if (!$response->successful()) return [];
 
-        $data = $response->json();
+            $data = $response->json();
 
         $documents = [];
         foreach ($data['documents'] ?? [] as $document) {
@@ -172,7 +182,7 @@ class FirestoreHelper
             ],
         ];
 
-        $response = Http::post($url, $query);
+        $response = Http::timeout(10)->post($url, $query);
 
         if (!$response->successful()) {
             logger()->error('Firestore query failed', [

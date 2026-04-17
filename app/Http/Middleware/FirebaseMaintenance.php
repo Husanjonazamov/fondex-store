@@ -11,12 +11,18 @@ class FirebaseMaintenance
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $maintenance_settings = FirestoreHelper::getDocument('settings/maintenance_settings');
-        if (!empty($maintenance_settings)) {
-            if ($maintenance_settings['isMaintenanceModeForVendor'] === true) {
-                return response()->view('maintenance');
+        try {
+            $maintenance_settings = FirestoreHelper::getDocument('settings/maintenance_settings');
+            if (!empty($maintenance_settings)) {
+                $isMaintenance = $maintenance_settings['isMaintenanceModeForVendor'] ?? false;
+                if ($isMaintenance === true) {
+                    return response()->view('maintenance');
+                }
             }
+        } catch (\Exception $e) {
+            logger()->error("Maintenance check failed", ['error' => $e->getMessage()]);
         }
+        
         return $next($request);
     }
 }

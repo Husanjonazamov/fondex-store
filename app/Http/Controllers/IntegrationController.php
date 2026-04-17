@@ -162,7 +162,7 @@ class IntegrationController extends Controller
 
                 // Next page (cursor-based pagination)
                 $nextUrl = $json['data']['next'] ?? null;
-                if ($nextUrl) {
+                if ($nextUrl && $nextUrl !== $url) {
                     $url = $nextUrl;
                     $params = []; // params already in the next URL
                 } else {
