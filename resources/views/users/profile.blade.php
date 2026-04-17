@@ -1489,6 +1489,11 @@
 
             var userData = userSnapshots.data();
 
+            if (!userData) {
+                jQuery("#data-table_processing").hide();
+                return;
+            }
+
             if (userData.sectionId != undefined && userData.sectionId != null && userData.sectionId != '') {
 
                 database.collection('sections').doc(userData.sectionId).get().then(async function(snapshots) {
