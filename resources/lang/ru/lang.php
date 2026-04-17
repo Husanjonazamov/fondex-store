@@ -259,7 +259,7 @@ return [
     'user_name' => 'Имя',
     'user_password_help' => 'Введите пароль',
     'user_phone' => 'Телефон',
-    'user_phone_help' => 'Введите номер телефона",
+    'user_phone_help' => 'Введите номер телефона',
     'user_plural' => 'Пользователи',
     'user_profile' => 'Профиль',
     'user_role_id_help' => 'Вставьте роль',

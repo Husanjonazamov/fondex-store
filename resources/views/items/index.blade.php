@@ -49,10 +49,11 @@
                                     <p class="mb-0 text-dark-2">{{ trans('lang.item_table_text') }}</p>
                                 </div>
                                 <div class="card-header-right d-flex align-items-center">
+                                    <div class="mr-3">
+                                        <input type="text" id="itemSearchInput" class="form-control" placeholder="{{ trans('lang.search') }}..." style="min-width:200px">
+                                    </div>
                                     <div class="card-header-btn mr-3">
-
                                         <a class="btn-primary btn rounded-full" href="{!! route('items.create') !!}"><i class="mdi mdi-plus mr-2"></i>{{ trans('lang.item_create') }}</a>
-
                                     </div>
                                 </div>
                             </div>
@@ -61,7 +62,6 @@
                                     <table id="itemTable" class="display nowrap table table-hover table-striped table-bordered table table-striped" cellspacing="0" width="100%">
                                         <thead>
                                             <tr>
-
                                                 <th>{{ trans('lang.item_info') }}</th>
                                                 <th>{{ trans('lang.item_price') }}</th>
                                                 <th>{{ trans('lang.item_category_id') }}</th>
@@ -73,6 +73,13 @@
                                         <tbody id="append_list1">
                                         </tbody>
                                     </table>
+                                </div>
+                                <!-- Pagination -->
+                                <div class="d-flex justify-content-between align-items-center mt-3" id="pagination-wrapper" style="display:none">
+                                    <div class="text-muted" id="pagination-info"></div>
+                                    <nav>
+                                        <ul class="pagination mb-0" id="pagination-controls"></ul>
+                                    </nav>
                                 </div>
                             </div>
                         </div>
@@ -87,7 +94,7 @@
     <script type="text/javascript">
         var database = firebase.firestore();
         var vendorUserId = "<?php echo $id; ?>";
-        var vendorId;
+        var vendorId = "<?php echo $vendorId; ?>";
         var ref;
         var append_list = '';
         var placeholderImage = '';
@@ -115,11 +122,21 @@
 
             if (snapshots.empty) {
                 console.error('No user found');
+                vendorId = vendorUserId;
                 return;
             }
 
             var data = snapshots.docs[0].data();
             section_id = data.sectionId;
+
+            // Try to get vendor ID from vendors collection, fallback to vendorUserId
+            try {
+                const vendorSnap = await database.collection('vendors').where('author', '==', vendorUserId).get();
+                vendorId = (!vendorSnap.empty && vendorSnap.docs[0].data().id) ? vendorSnap.docs[0].data().id : vendorUserId;
+            } catch(e) {
+                vendorId = vendorUserId;
+            }
+            console.log('vendorId:', vendorId);
 
             await fetchSectionData();
         }
@@ -170,132 +187,130 @@
                 if (snap.exists) placeholderImage = snap.data().image;
             });
 
-            var fieldConfig = {
-                columns: [
-                    { key: 'name',       header: "{{ trans('lang.item_info') }}" },
-                    { key: 'finalPrice', header: "{{ trans('lang.item_price') }}" },
-                    { key: 'category',   header: "{{ trans('lang.item_category_id') }}" },
-                    { key: 'publish',    header: "{{ trans('lang.item_publish') }}" },
-                ],
-                fileName: "{{ trans('lang.item_table') }}",
-            };
+            var itemTable;
+            try {
+                itemTable = $('#itemTable').DataTable({
+                    paging: false,
+                    searching: false,
+                    info: false,
+                    processing: false,
+                    serverSide: false,
+                    columnDefs: [{ orderable: false, targets: [0, 3, 5] }],
+                    order: [[4, 'asc']],
+                    language: {
+                        zeroRecords: "{{ trans('lang.no_record_found') }}",
+                        emptyTable: "{{ trans('lang.no_record_found') }}",
+                        processing: ""
+                    }
+                });
+            } catch(e) {
+                console.error('DataTable init FAILED:', e);
+            }
 
-            var itemTable = $('#itemTable').DataTable({
-                pageLength: 10,
-                processing: false,
-                serverSide: false,
-                responsive: true,
-                columnDefs: [{
-                    orderable: false,
-                    targets: [0, 3, 5]
-                }],
-                order: [4, 'asc'],
-                "language": {
-                    "zeroRecords": "{{ trans('lang.no_record_found') }}",
-                    "emptyTable": "{{ trans('lang.no_record_found') }}",
-                    "processing": "" 
-                },
-                dom: 'lfrtipB',
-                buttons: [{
-                    extend: 'collection',
-                    text: '<i class="mdi mdi-cloud-download"></i> Export as',
-                    className: 'btn btn-info',
-                    buttons: ['excel', 'pdf', 'csv']
-                }],
-                initComplete: function() {
-                    $(".dataTables_filter").append($(".dt-buttons").detach());
-                }
-            });
-
-            var totalFetched = 0;
-            var categoryMap = {};
-            var searchTimeout = null;
+            var categoryMap  = {};
+            var currentPage  = 1;
             var currentSearch = '';
+            var pageLimit    = 20;
+            var hasNextPage  = false;
+            var hasPrevPage  = false;
+            var searchTimeout = null;
 
-            function fetchItems(nextUrl = null, searchQuery = '') {
+            function buildRow(item) {
+                var finalPrice = (item.disPrice && parseFloat(item.disPrice) > 0) ? item.disPrice : item.price;
+                var createdAt  = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
+                var routeEdit  = '{{ route('items.edit', ':id') }}'.replace(':id', item.id);
+                var img        = '<img class="rounded" style="width:50px" src="' + (item.photo || placeholderImage) + '" onerror="this.src=\'' + placeholderImage + '\'">';
+                var nameCol    = img + '<a href="' + routeEdit + '" class="left_space">' + (item.name || '') + '</a>';
+                var catName    = categoryMap[item.categoryID] || item.category || '';
+                var pubCol     = item.publish === 'Yes' ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>';
+                var actCol     = '<span class="action-btn"><a href="' + routeEdit + '"><i class="mdi mdi-lead-pencil"></i></a><a id="' + item.id + '" name="item-delete" href="javascript:void(0)"><i class="mdi mdi-delete"></i></a></span>';
+                return [nameCol, parseFloat(finalPrice) || 0, catName, pubCol, createdAt, actCol];
+            }
+
+            function renderPagination(itemCount) {
+                var start = (currentPage - 1) * pageLimit + 1;
+                var end   = start + itemCount - 1;
+                $('#pagination-info').text(start + ' - ' + end + ' ta mahsulot (sahifa ' + currentPage + ')');
+
+                var html = '';
+                html += '<li class="page-item ' + (!hasPrevPage ? 'disabled' : '') + '">';
+                html += '<a class="page-link" href="#" id="btn-prev">&laquo; Oldingi</a></li>';
+                html += '<li class="page-item active"><span class="page-link">' + currentPage + '</span></li>';
+                html += '<li class="page-item ' + (!hasNextPage ? 'disabled' : '') + '">';
+                html += '<a class="page-link" href="#" id="btn-next">Keyingi &raquo;</a></li>';
+
+                $('#pagination-controls').html(html);
+                $('#pagination-wrapper').toggle(hasNextPage || hasPrevPage);
+            }
+
+            function fetchItems(page, search) {
+                page   = page || 1;
+                search = search !== undefined ? search : currentSearch;
+                if (!itemTable) return;
+
                 jQuery("#data-table_processing").show();
-                
+                itemTable.clear().draw();
+
                 $.ajax({
                     url: '{{ route('items.fetch') }}',
                     type: 'GET',
-                    data: { 
-                        next_url: nextUrl,
-                        search: searchQuery
-                    },
+                    timeout: 60000,
+                    data: { vendor_id: vendorId, search: search, page: page, limit: pageLimit },
                     dataType: 'json',
-                    success: async function(response) {
-                        try {
-                            if (response.error === 'vendor_not_synced') {
-                                setTimeout(function() { window.location.reload(); }, 5000);
-                                return;
-                            }
+                    success: function(response) {
+                        var items = response.results || (response.data && response.data.results) || [];
+                        hasNextPage = response.has_next || false;
+                        hasPrevPage = response.has_prev || false;
+                        currentPage = response.page || page;
 
-                            var items = (response.data && response.data.results) ? response.data.results : (response.results || []);
-                            
-                            // Fetch missing categories from Firestore
-                            var categoryIds = [...new Set(items.map(i => i.categoryID).filter(id => id && !categoryMap[id]))];
-                            if (categoryIds.length > 0) {
-                                try {
-                                    const catSnap = await database.collection('vendor_categories').where('id', 'in', categoryIds.slice(0, 10)).get();
-                                    catSnap.forEach(d => { categoryMap[d.data().id] = d.data().title || d.data().name; });
-                                } catch (e) { console.error('Firestore cat fetch error:', e); }
-                            }
+                        var rows = items.map(buildRow);
+                        itemTable.rows.add(rows).draw();
+                        $('.total_count').text('Sahifa ' + currentPage + ' (' + items.length + ' ta)');
+                        jQuery("#data-table_processing").hide();
+                        renderPagination(items.length);
 
-                            var newRows = [];
-                            items.forEach(function(item) {
-                                var finalPrice = (item.disPrice && item.disPrice != '0') ? item.disPrice : item.price;
-                                var createdAt = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
-                                var routeEdit = '{{ route('items.edit', ':id') }}'.replace(':id', item.id);
-                                
-                                var imgUrl = item.photo || placeholderImage;
-                                var img = '<img class="rounded" style="width:50px" src="' + imgUrl + '" onerror="this.src=\'' + placeholderImage + '\'">';
-                                var nameCol = img + '<a href="' + routeEdit + '" class="left_space">' + (item.name || '') + '</a>';
-                                var catName = categoryMap[item.categoryID] || item.category || 'N/A';
-                                var pubCol = (item.publish === 'Yes' || item.publish === true) ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>';
-                                var actCol = '<span class="action-btn"><a href="' + routeEdit + '"><i class="mdi mdi-lead-pencil"></i></a><a id="' + item.id + '" name="item-delete" href="javascript:void(0)"><i class="mdi mdi-delete"></i></a></span>';
-
-                                newRows.push([nameCol, finalPrice, catName, pubCol, createdAt, actCol]);
-                            });
-
-                            itemTable.rows.add(newRows).draw(false);
-                            totalFetched += items.length;
-                            $('.total_count').text(totalFetched);
-
-                            if (response.next_url) {
-                                $('.food-limit-note').text('Loading more products... (' + totalFetched + ' items fetched)');
-                                fetchItems(response.next_url, searchQuery); 
-                            } else {
-                                $('.food-limit-note').text('Total ' + totalFetched + ' products loaded.');
-                                jQuery("#data-table_processing").hide();
-                            }
-                        } catch (err) {
-                            console.error('Success handler Error:', err);
-                            jQuery("#data-table_processing").hide();
+                        var catIds = [...new Set(items.map(function(i){ return i.categoryID; }).filter(Boolean))];
+                        if (catIds.length > 0) {
+                            database.collection('vendor_categories').where('id', 'in', catIds.slice(0, 10)).get()
+                                .then(function(snap) {
+                                    snap.forEach(function(d){ categoryMap[d.data().id] = d.data().title || d.data().name || ''; });
+                                }).catch(function(){});
                         }
                     },
                     error: function(xhr) {
                         jQuery("#data-table_processing").hide();
-                        console.error('Fetch failed', xhr);
+                        console.error('fetch error:', xhr.status, xhr.responseText);
                     }
                 });
             }
 
-            // Hook into DataTable search box to trigger API-side search
-            $('.dataTables_filter input').unbind().bind('keyup', function(e) {
-                var searchTerm = $(this).val();
-                if (searchTerm === currentSearch) return;
-                
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(function() {
-                    currentSearch = searchTerm;
-                    totalFetched = 0;
-                    itemTable.clear().draw();
-                    fetchItems(null, currentSearch);
-                }, 700); // 700ms debounce
+            // Pagination clicks
+            $(document).on('click', '#btn-next', function(e) {
+                e.preventDefault();
+                if (!hasNextPage) return;
+                fetchItems(currentPage + 1, currentSearch);
+                $('html, body').animate({ scrollTop: $('#itemTable').offset().top - 100 }, 200);
             });
 
-            // Start the initial fetching process
-            fetchItems();
+            $(document).on('click', '#btn-prev', function(e) {
+                e.preventDefault();
+                if (!hasPrevPage || currentPage <= 1) return;
+                fetchItems(currentPage - 1, currentSearch);
+                $('html, body').animate({ scrollTop: $('#itemTable').offset().top - 100 }, 200);
+            });
+
+            // Search
+            $('#itemSearchInput').on('input', function() {
+                clearTimeout(searchTimeout);
+                var q = $(this).val();
+                searchTimeout = setTimeout(function() {
+                    currentSearch = q;
+                    currentPage   = 1;
+                    fetchItems(1, q);
+                }, 400);
+            });
+
+            fetchItems(1, '');
         })
 
         async function buildHTML(val) {

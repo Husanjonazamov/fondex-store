@@ -19,14 +19,14 @@ class FoodController extends Controller
         $this->middleware('auth');
     }
 
-	  public function index()
+    public function index()
     {
-      $user = Auth::user();
-      $id = Auth::id();
-      $exist = VendorUsers::where('user_id',$id)->first();
-      $id=$exist->uuid;
+        $user = Auth::user();
+        $exist = VendorUsers::where('user_id', $user->id)->first();
+        $uuid = $exist->uuid;
+        $vendorId = $exist->firestore_vendor_id ?: $uuid;
 
-   		return view("items.index")->with('id',$id);
+        return view("items.index")->with('id', $uuid)->with('vendorId', $vendorId);
     }
 
     public function edit($id)

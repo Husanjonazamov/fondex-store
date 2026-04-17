@@ -115,7 +115,7 @@ class IntegrationController extends Controller
     }
 
     /**
-     * Fetch all products for current vendor from external API (handles pagination)
+     * Fetch products for current vendor from external API (with pagination support)
      */
     public function getProducts(Request $request)
     {
@@ -128,48 +128,57 @@ class IntegrationController extends Controller
                 return response()->json(['success' => false, 'message' => 'Vendor not found'], 404);
             }
 
-            $firestoreVendorId = $vendorUser->firestore_vendor_id ?? '';
-
-            \Log::info('getProducts', [
-                'user_id'             => $user->id,
-                'uuid'                => $vendorUser->uuid,
-                'firestore_vendor_id' => $firestoreVendorId,
-            ]);
+            $firestoreVendorId = $request->vendor_id ?: ($vendorUser->firestore_vendor_id ?? '');
 
             if (empty($firestoreVendorId)) {
                 return response()->json([
-                    'data'    => ['results' => []],
                     'results' => [],
+                    'count'   => 0,
+                    'total'   => 0,
                     'error'   => 'vendor_not_synced',
                 ]);
             }
 
-            $allResults = [];
-            // If the frontend passed a specific next_url (cursor), use it. Otherwise start from page 1.
-            $url = $request->next_url ?: ($this->apiUrl . '/products/');
-            $params = [];
-            if (!$request->next_url) {
-                $params['vendor'] = $firestoreVendorId;
-                $params['limit'] = 20;
-                if ($request->search) {
-                    $params['search'] = $request->search;
+            $page   = max(1, (int)($request->page ?? 1));
+            $limit  = max(1, min(100, (int)($request->limit ?? 20)));
+            $offset = ($page - 1) * $limit;
+
+            $params = [
+                'vendor' => $firestoreVendorId,
+                'limit'  => $limit,
+                'offset' => $offset,
+            ];
+            if ($request->search) {
+                $params['search'] = $request->search;
+            }
+
+            \Log::info('getProducts', ['vendor' => $firestoreVendorId, 'page' => $page, 'limit' => $limit]);
+
+            $response = Http::withoutVerifying()->timeout(30)->get($this->apiUrl . '/products/', $params);
+
+            // If not found, try to map firestore vendor ID to backend vendor ID
+            if (!$response->successful() || empty($response->json()['results'] ?? $response->json()['data']['results'] ?? [])) {
+                $vendorSearch = Http::withoutVerifying()->timeout(10)->get($this->apiUrl . '/vendors/', [
+                    'firestore_id' => $firestoreVendorId,
+                ]);
+                if ($vendorSearch->successful()) {
+                    $vResults = $vendorSearch->json()['results'] ?? $vendorSearch->json()['data']['results'] ?? [];
+                    if (!empty($vResults)) {
+                        $params['vendor'] = $vResults[0]['id'];
+                        $response = Http::withoutVerifying()->timeout(30)->get($this->apiUrl . '/products/', $params);
+                    }
                 }
             }
 
-            \Log::info('getProducts starting fetch', ['url' => $url, 'params' => $params]);
-
-            $response = Http::timeout(10)->get($url, $params);
-            
             if (!$response->successful()) {
-                return response()->json(['success' => false, 'message' => 'Remote API Error'], $response->status());
+                return response()->json(['success' => false, 'message' => 'API Error', 'status' => $response->status()], 502);
             }
 
-            $json = $response->json();
-            $results = $json['data']['results'] ?? $json['results'] ?? [];
-            $allResults = $results;
-            $nextUrl = $json['data']['next'] ?? null;
+            $json    = $response->json();
+            $rawList = $json['data']['results'] ?? $json['results'] ?? [];
+            $hasNext = !empty($json['data']['next'] ?? $json['next'] ?? null);
+            $hasPrev = !empty($json['data']['previous'] ?? $json['previous'] ?? null);
 
-            // Normalize field names for the frontend
             $normalized = array_map(function ($item) {
                 return [
                     'id'          => $item['firestore_id'] ?? ($item['id'] ?? ''),
@@ -187,16 +196,21 @@ class IntegrationController extends Controller
                     'quantity'    => $item['quantity'] ?? 0,
                     'createdAt'   => $item['created_at'] ?? null,
                 ];
-            }, $allResults);
+            }, $rawList);
+
+            \Log::info('getProducts done', ['page' => $page, 'count' => count($normalized), 'has_next' => $hasNext]);
 
             return response()->json([
-                'data'       => ['results' => $normalized],
-                'results'    => $normalized,
-                'next_url'   => $nextUrl,
-                'is_loading' => !empty($nextUrl)
+                'results'  => $normalized,
+                'count'    => count($normalized),
+                'page'     => $page,
+                'limit'    => $limit,
+                'has_next' => $hasNext,
+                'has_prev' => $hasPrev,
             ]);
 
         } catch (Exception $e) {
+            \Log::error('getProducts error', ['message' => $e->getMessage()]);
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
