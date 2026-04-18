@@ -313,6 +313,7 @@
                         </div>
                     </form>
                     <div class="modal-footer">
+                        <button type="button" class="btn btn-warning" id="random-courier-btn"><i class="mdi mdi-shuffle-variant mr-1"></i>Tasodifiy kuryer</button>
                         <button type="button" class="btn btn-primary" id="order-assign-btn">{{ trans('lang.assign') }}
                         </button>
                         <button type="button" class="btn btn-primary" data-dismiss="modal" aria-label="Close">
@@ -1015,6 +1016,18 @@
                 }
                 return h;
             }
+            $('#random-courier-btn').click(function() {
+                var freeOptions = $('#deliveryman_list option:not(:disabled):not([value=""])');
+                if (freeOptions.length === 0) {
+                    $('#select_deliveryman').html('Bosh kuryer topilmadi');
+                    return;
+                }
+                var randomIndex = Math.floor(Math.random() * freeOptions.length);
+                var randomVal = $(freeOptions[randomIndex]).val();
+                $('#deliveryman_list').val(randomVal).trigger('change');
+                $('#select_deliveryman').html('');
+            });
+
             $('#order-assign-btn').click(function() {
                 var deliveryman = $('#deliveryman_list').val();
                 if (deliveryman == '' || deliveryman == null) {
