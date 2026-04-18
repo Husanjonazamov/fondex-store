@@ -175,6 +175,7 @@ Route::middleware(['check.subscription'])->group(function () {
     // Integration Routes
     Route::post('/items/sync', [App\Http\Controllers\IntegrationController::class, 'syncProduct'])->name('items.sync');
     Route::get('/items/fetch', [App\Http\Controllers\IntegrationController::class, 'getProducts'])->name('items.fetch');
+    Route::delete('/items/delete', [App\Http\Controllers\IntegrationController::class, 'deleteProduct'])->name('items.delete');
     Route::post('/categories/sync', [App\Http\Controllers\IntegrationController::class, 'syncCategory'])->name('categories.sync');
     Route::get('/categories/fetch', [App\Http\Controllers\IntegrationController::class, 'getCategories'])->name('categories.fetch');
 });

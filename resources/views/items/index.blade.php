@@ -388,7 +388,24 @@
         }
 
         $(document).on("click", "a[name='item-delete']", async function(e) {
+            if (!confirm("Mahsulotni o'chirmoqchimisiz?")) return;
             const id = this.id;
+            const $btn = $(this);
+            $btn.css('opacity', '0.5').css('pointer-events', 'none');
+
+            // Delete from external API
+            try {
+                await $.ajax({
+                    url: '{{ route('items.delete') }}',
+                    type: 'DELETE',
+                    data: { product_id: id, _token: '{{ csrf_token() }}' },
+                    dataType: 'json'
+                });
+            } catch (err) {
+                console.warn('API delete failed, continuing with Firestore delete', err);
+            }
+
+            // Delete from Firestore
             await deleteDocumentWithImage('vendor_products', id, 'photo', 'photos');
             window.location = "{{ url()->current() }}";
         });

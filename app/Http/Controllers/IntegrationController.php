@@ -208,6 +208,34 @@ class IntegrationController extends Controller
     }
 
     /**
+     * Delete product from external API
+     */
+    public function deleteProduct(Request $request)
+    {
+        try {
+            $productId = $request->product_id;
+            if (empty($productId)) {
+                return response()->json(['success' => false, 'message' => 'product_id required'], 422);
+            }
+
+            $resp = Http::withoutVerifying()->timeout(15)->delete($this->apiUrl . '/products/' . $productId . '/');
+
+            if ($resp->status() === 404) {
+                return response()->json(['success' => true, 'message' => 'Already deleted']);
+            }
+
+            if (!$resp->successful()) {
+                return response()->json(['success' => false, 'message' => 'API error: ' . $resp->status()], 500);
+            }
+
+            return response()->json(['success' => true]);
+        } catch (Exception $e) {
+            \Log::error('deleteProduct error', ['message' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Sync category to external API
      */
     public function syncCategory(Request $request)
