@@ -804,9 +804,7 @@
                     if (langcount > 1) {
                         $("#language_dropdown_box").css('visibility', 'visible');
                     }
-                    <?php if (session()->get('locale')) { ?>
-                    $("#language_dropdown").val("<?php echo session()->get('locale'); ?>");
-                    <?php } ?>
+                    $("#language_dropdown").val("<?php echo session()->get('locale', 'uz'); ?>");
 
                 }
             });

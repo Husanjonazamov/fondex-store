@@ -389,7 +389,7 @@
 
                     var val = product;
 
-                    price_item = parseFloat(val.price).toFixed(decimal_degits);
+                    price_item = parseFloat((val.disPrice && parseFloat(val.disPrice) > 0) ? val.disPrice : val.price).toFixed(decimal_degits);
 
                     extras_price_item = (parseFloat(val.extras_price) * parseInt(val.quantity)).toFixed(decimal_degits);
 

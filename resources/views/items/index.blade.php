@@ -49,9 +49,6 @@
                                     <p class="mb-0 text-dark-2">{{ trans('lang.item_table_text') }}</p>
                                 </div>
                                 <div class="card-header-right d-flex align-items-center">
-                                    <div class="mr-3">
-                                        <input type="text" id="itemSearchInput" class="form-control" placeholder="{{ trans('lang.search') }}..." style="min-width:200px">
-                                    </div>
                                     <div class="card-header-btn mr-3">
                                         <a class="btn-primary btn rounded-full" href="{!! route('items.create') !!}"><i class="mdi mdi-plus mr-2"></i>{{ trans('lang.item_create') }}</a>
                                     </div>
@@ -74,12 +71,9 @@
                                         </tbody>
                                     </table>
                                 </div>
-                                <!-- Pagination -->
                                 <div class="d-flex justify-content-between align-items-center mt-3" id="pagination-wrapper" style="display:none">
-                                    <div class="text-muted" id="pagination-info"></div>
-                                    <nav>
-                                        <ul class="pagination mb-0" id="pagination-controls"></ul>
-                                    </nav>
+                                    <div></div>
+                                    <nav><ul class="pagination mb-0" id="pagination-controls"></ul></nav>
                                 </div>
                             </div>
                         </div>
@@ -161,7 +155,7 @@
 
         }
 
-        fetchSectionId();
+        var vendorIdReady = fetchSectionId();
 
         activeCurrencyref.get().then(async function(currencySnapshots) {
             if (!currencySnapshots.empty) {
@@ -190,17 +184,16 @@
             var itemTable;
             try {
                 itemTable = $('#itemTable').DataTable({
-                    paging: false,
-                    searching: false,
-                    info: false,
+                    paging:     false,
+                    info:       false,
+                    searching:  false,
                     processing: false,
                     serverSide: false,
                     columnDefs: [{ orderable: false, targets: [0, 3, 5] }],
                     order: [[4, 'asc']],
                     language: {
                         zeroRecords: "{{ trans('lang.no_record_found') }}",
-                        emptyTable: "{{ trans('lang.no_record_found') }}",
-                        processing: ""
+                        emptyTable:  "{{ trans('lang.no_record_found') }}",
                     }
                 });
             } catch(e) {
@@ -208,12 +201,10 @@
             }
 
             var categoryMap  = {};
+            var cursorStack  = [];   // history of cursors for "prev"
+            var nextCursor   = null;
             var currentPage  = 1;
-            var currentSearch = '';
-            var pageLimit    = 20;
-            var hasNextPage  = false;
-            var hasPrevPage  = false;
-            var searchTimeout = null;
+            var totalLoaded  = 0;
 
             function buildRow(item) {
                 var finalPrice = (item.disPrice && parseFloat(item.disPrice) > 0) ? item.disPrice : item.price;
@@ -227,90 +218,76 @@
                 return [nameCol, parseFloat(finalPrice) || 0, catName, pubCol, createdAt, actCol];
             }
 
-            function renderPagination(itemCount) {
-                var start = (currentPage - 1) * pageLimit + 1;
-                var end   = start + itemCount - 1;
-                $('#pagination-info').text(start + ' - ' + end + ' ta mahsulot (sahifa ' + currentPage + ')');
-
+            function renderPagination(hasNext) {
+                var hasPrev = cursorStack.length > 0;
                 var html = '';
-                html += '<li class="page-item ' + (!hasPrevPage ? 'disabled' : '') + '">';
-                html += '<a class="page-link" href="#" id="btn-prev">&laquo; Oldingi</a></li>';
+                html += '<li class="page-item' + (!hasPrev ? ' disabled' : '') + '"><a class="page-link" href="#" id="btn-prev">&laquo; Oldingi</a></li>';
                 html += '<li class="page-item active"><span class="page-link">' + currentPage + '</span></li>';
-                html += '<li class="page-item ' + (!hasNextPage ? 'disabled' : '') + '">';
-                html += '<a class="page-link" href="#" id="btn-next">Keyingi &raquo;</a></li>';
-
+                html += '<li class="page-item' + (!hasNext ? ' disabled' : '') + '"><a class="page-link" href="#" id="btn-next">Keyingi &raquo;</a></li>';
                 $('#pagination-controls').html(html);
-                $('#pagination-wrapper').toggle(hasNextPage || hasPrevPage);
+                $('#pagination-wrapper').toggle(hasPrev || hasNext);
+                $('.total_count').text('Sahifa ' + currentPage);
             }
 
-            function fetchItems(page, search) {
-                page   = page || 1;
-                search = search !== undefined ? search : currentSearch;
+            function fetchPage(cursor) {
                 if (!itemTable) return;
-
                 jQuery("#data-table_processing").show();
                 itemTable.clear().draw();
 
-                $.ajax({
-                    url: '{{ route('items.fetch') }}',
-                    type: 'GET',
-                    timeout: 60000,
-                    data: { vendor_id: vendorId, search: search, page: page, limit: pageLimit },
-                    dataType: 'json',
-                    success: function(response) {
-                        var items = response.results || (response.data && response.data.results) || [];
-                        hasNextPage = response.has_next || false;
-                        hasPrevPage = response.has_prev || false;
-                        currentPage = response.page || page;
+                vendorIdReady.then(function() {
+                    var data = { vendor_id: vendorId };
+                    if (cursor) data.cursor = cursor;
 
-                        var rows = items.map(buildRow);
-                        itemTable.rows.add(rows).draw();
-                        $('.total_count').text('Sahifa ' + currentPage + ' (' + items.length + ' ta)');
-                        jQuery("#data-table_processing").hide();
-                        renderPagination(items.length);
+                    $.ajax({
+                        url: '{{ route('items.fetch') }}',
+                        type: 'GET',
+                        timeout: 30000,
+                        data: data,
+                        dataType: 'json',
+                        success: function(response) {
+                            var items = response.results || [];
+                            nextCursor = response.next_cursor || null;
 
-                        var catIds = [...new Set(items.map(function(i){ return i.categoryID; }).filter(Boolean))];
-                        if (catIds.length > 0) {
-                            database.collection('vendor_categories').where('id', 'in', catIds.slice(0, 10)).get()
-                                .then(function(snap) {
-                                    snap.forEach(function(d){ categoryMap[d.data().id] = d.data().title || d.data().name || ''; });
-                                }).catch(function(){});
+                            itemTable.rows.add(items.map(buildRow)).draw();
+                            jQuery("#data-table_processing").hide();
+                            renderPagination(response.has_next);
+
+                            var catIds = [...new Set(items.map(function(i){ return i.categoryID; }).filter(Boolean))];
+                            if (catIds.length > 0) {
+                                database.collection('vendor_categories').where('id', 'in', catIds.slice(0, 10)).get()
+                                    .then(function(snap) {
+                                        snap.forEach(function(d){ categoryMap[d.data().id] = d.data().title || d.data().name || ''; });
+                                    }).catch(function(){});
+                            }
+                        },
+                        error: function(xhr) {
+                            jQuery("#data-table_processing").hide();
+                            console.error('fetch error:', xhr.status, xhr.responseText);
                         }
-                    },
-                    error: function(xhr) {
-                        jQuery("#data-table_processing").hide();
-                        console.error('fetch error:', xhr.status, xhr.responseText);
-                    }
+                    });
                 });
             }
 
-            // Pagination clicks
             $(document).on('click', '#btn-next', function(e) {
                 e.preventDefault();
-                if (!hasNextPage) return;
-                fetchItems(currentPage + 1, currentSearch);
-                $('html, body').animate({ scrollTop: $('#itemTable').offset().top - 100 }, 200);
+                if (!nextCursor) return;
+                cursorStack.push(nextCursor);
+                currentPage++;
+                fetchPage(nextCursor);
+                $('html,body').animate({ scrollTop: 0 }, 200);
             });
 
             $(document).on('click', '#btn-prev', function(e) {
                 e.preventDefault();
-                if (!hasPrevPage || currentPage <= 1) return;
-                fetchItems(currentPage - 1, currentSearch);
-                $('html, body').animate({ scrollTop: $('#itemTable').offset().top - 100 }, 200);
+                if (cursorStack.length === 0) return;
+                cursorStack.pop();
+                currentPage--;
+                var prevCursor = cursorStack.length > 0 ? cursorStack[cursorStack.length - 1] : null;
+                fetchPage(prevCursor);
+                $('html,body').animate({ scrollTop: 0 }, 200);
             });
 
-            // Search
-            $('#itemSearchInput').on('input', function() {
-                clearTimeout(searchTimeout);
-                var q = $(this).val();
-                searchTimeout = setTimeout(function() {
-                    currentSearch = q;
-                    currentPage   = 1;
-                    fetchItems(1, q);
-                }, 400);
-            });
-
-            fetchItems(1, '');
+            fetchPage(null);
         })
 
         async function buildHTML(val) {
