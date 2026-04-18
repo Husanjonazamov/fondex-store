@@ -541,7 +541,7 @@
         var selfDeliveryDriverCancelledMsg = '';
         var selfDeliveryCustomerCancelledSub = '';
         var selfDeliveryCustomerCancelledMsg = '';
-        var isSelfDeliveryGlobally = false;
+        var isSelfDeliveryGlobally = true;
         var isSelfDeliveryByVendor = false;
         var singleOrderReceive = false;
         var refDriverNearBy = database.collection('settings').doc("DriverNearBy");
@@ -558,16 +558,6 @@
             if (data) {
                 scheduleOrderAcceptData.notifyTime = data.notifyTime;
                 scheduleOrderAcceptData.timeUnit = data.timeUnit;
-            }
-        })
-        var refGlobal = database.collection('settings').doc("globalSettings");
-        refGlobal.get().then(async function(
-            settingSnapshots) {
-            if (settingSnapshots.data()) {
-                var settingData = settingSnapshots.data();
-                if (settingData.isSelfDelivery) {
-                    isSelfDeliveryGlobally = true;
-                }
             }
         })
         database.collection('dynamic_notification').get().then(async function(snapshot) {
@@ -1778,7 +1768,7 @@
                 var val = product;
                 var product_id = (val.variant_info && val.variant_info.variant_id) ? val.variant_info.variant_id :
                     val.id;
-                html = html + '<tr>';
+                html = html + '<tr class="product-row" data-pid="' + product_id + '" data-qty="' + (val.quantity || 1) + '" data-extras="0">';
                 var extra_html = '';
                 if (product.extras != undefined && product.extras != '' && product.extras.length > 0) {
                     extra_html = extra_html + '<span>';
@@ -1861,10 +1851,10 @@
                 checkIsDownloadedItem(product.id);
                 html = html + '</div></div></td>';
                 html = html + '<td class="d-btn" data-pid="' + product.id + '" style="display:none;"></td>';
-                html = html + '<td class="text-green text-center"><span class="item-price">' + price_val +
+                html = html + '<td class="text-green text-center"><span class="item-price item-price-' + product_id + '">' + price_val +
                     '</span><br><span class="base-price-' + product_id + ' text-muted"></span></td><td> × ' + val
                     .quantity + '</td><td class="text-green"> + ' + extras_price_val +
-                    '</td><td class="text-green">  ' + totalProductPrice_val + '</td>';
+                    '</td><td class="text-green item-total-' + product_id + '" data-raw-total="' + totalProductPrice + '">  ' + totalProductPrice_val + '</td>';
                 html = html + '</tr>';
                 total_price += parseFloat(totalProductPrice);
             });
@@ -1900,6 +1890,33 @@
                             decimal_degits);
                     }
                     $(".base-price-" + product_id).text('(Base Price: ' + base_price_format + ')');
+
+                    // Update item price and row total with discounted price
+                    var qty = parseInt($('.product-row[data-pid="' + product_id + '"]').data('qty') || 1);
+                    var extras = parseFloat(product.extras_price || 0) * qty;
+                    var new_unit_price = parseFloat(base_price);
+                    var new_total = (new_unit_price * qty) + extras;
+                    if (currencyAtRight) {
+                        var new_price_val = new_unit_price.toFixed(decimal_degits) + "" + currentCurrency;
+                        var new_total_val = new_total.toFixed(decimal_degits) + "" + currentCurrency;
+                    } else {
+                        var new_price_val = currentCurrency + "" + new_unit_price.toFixed(decimal_degits);
+                        var new_total_val = currentCurrency + "" + new_total.toFixed(decimal_degits);
+                    }
+                    $(".item-price-" + product_id).text(new_price_val);
+                    $(".item-total-" + product_id).text("  " + new_total_val).attr('data-raw-total', new_total.toFixed(decimal_degits));
+
+                    // Recalculate and update subtotal
+                    var recalc_total = 0;
+                    $('[data-raw-total]').each(function() {
+                        recalc_total += parseFloat($(this).attr('data-raw-total') || 0);
+                    });
+                    if (currencyAtRight) {
+                        var new_subtotal = recalc_total.toFixed(decimal_degits) + "" + currentCurrency;
+                    } else {
+                        var new_subtotal = currentCurrency + "" + recalc_total.toFixed(decimal_degits);
+                    }
+                    $(".sub_total").text("(" + new_subtotal + ")");
                 }
             });
         }

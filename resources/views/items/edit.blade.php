@@ -567,7 +567,9 @@
                         $('#item_attribute').append(option);
                     })
                     $("#item_attribute").show().chosen({
-                        "placeholder_text": "{{ trans('lang.select_attribute') }}"
+                        "placeholder_text": "{{ trans('lang.select_attribute') }}",
+                        "search_contains": true,
+                        "disable_search": false
                     });
 
                     if (product.item_attribute) {
@@ -1282,6 +1284,16 @@
                 $("#attributes").val('');
                 $("#variants").val('');
                 $("#item_variants").html('');
+                return;
+            }
+
+            // Explicitly call variants_update to ensure prices/quantities load from saved data
+            if (item_attribute) {
+                console.log('selectAttribute item_attribute:', JSON.stringify(item_attribute));
+                variants_update(btoa(JSON.stringify(item_attribute)));
+            } else {
+                console.log('selectAttribute: no item_attribute, calling without data');
+                variants_update();
             }
         }
 
@@ -1289,6 +1301,9 @@
 
             if (item_attributeX) {
                 var item_attributeX = $.parseJSON(atob(item_attributeX));
+                console.log('variants_update item_attributeX:', JSON.stringify(item_attributeX));
+            } else {
+                console.log('variants_update: no item_attributeX');
             }
 
             var html = '';
@@ -1322,7 +1337,8 @@
                     var variants = getCombinations(attributeSet);
                     $('#variants').val(JSON.stringify(variants));
 
-                    html += '<table class="table table-bordered">';
+                    html += '<div class="mb-2"><input type="text" id="variant_search" class="form-control" placeholder="Variantlarni qidirish..." oninput="filterVariants(this.value)"></div>';
+                    html += '<table class="table table-bordered" id="variants_table">';
                     html += '<thead class="thead-light">';
                     html += '<tr>';
                     html += '<th class="text-center"><span class="control-label">Variant</span></th>';
@@ -1331,7 +1347,7 @@
                     html += '<th class="text-center"><span class="control-label">Variant Image</span></th>';
                     html += '</tr>';
                     html += '</thead>';
-                    html += '<tbody>';
+                    html += '<tbody id="variants_tbody">';
                     $.each(variants, function(index, variant) {
 
                         var variant_price = 1;
@@ -1339,7 +1355,8 @@
                         var variant_image = variant_image_url = '';
                         if (item_attributeX) {
                             var variant_info = $.map(item_attributeX.variants, function(v, i) {
-                                if (v.variant_sku == variant) {
+                                var normalizedSku = v.variant_sku.replace(/[^a-zA-Z0-9]/g, '');
+                                if (normalizedSku == variant || v.variant_sku == variant) {
                                     return v;
                                 }
                             });
@@ -1406,10 +1423,19 @@
             const id = sec.toString(16).replace(/\./g, "").padEnd(14, "0");
             return `${prefix}${id}${random ? `.${Math.trunc(Math.random() * 100000000)}` : ""}`;
         }
+        // Search/filter variants table
+        window.filterVariants = function(query) {
+            query = query.toLowerCase();
+            $('#variants_tbody tr').each(function() {
+                var label = $(this).find('td:first label').text().toLowerCase();
+                $(this).toggle(label.indexOf(query) !== -1);
+            });
+        };
+
         // Clear error message when user updates the price field
         $(document).on('input', '[id^="price_"]', function() {
             if (parseFloat($(this).val()) > 0) {
-                $(".error_top").hide().html(""); // Hide the error message
+                $(".error_top").hide().html("");
             }
         });
     </script>

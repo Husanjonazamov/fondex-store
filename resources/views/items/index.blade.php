@@ -55,6 +55,11 @@
                                 </div>
                             </div>
                             <div class="card-body">
+                                <div class="mb-3 d-flex">
+                                    <input type="text" id="product-search-input" class="form-control" placeholder="Mahsulot nomini qidirish..." style="max-width:350px;">
+                                    <button class="btn btn-primary ml-2" id="product-search-btn"><i class="mdi mdi-magnify"></i> Qidirish</button>
+                                    <button class="btn btn-secondary ml-2" id="product-search-clear" style="display:none;">Tozalash</button>
+                                </div>
                                 <div class="table-responsive m-t-10">
                                     <table id="itemTable" class="display nowrap table table-hover table-striped table-bordered table table-striped" cellspacing="0" width="100%">
                                         <thead>
@@ -205,6 +210,7 @@
             var nextCursor   = null;
             var currentPage  = 1;
             var totalLoaded  = 0;
+            var currentSearch = '';
 
             function buildRow(item) {
                 var finalPrice = (item.disPrice && parseFloat(item.disPrice) > 0) ? item.disPrice : item.price;
@@ -237,6 +243,7 @@
                 vendorIdReady.then(function() {
                     var data = { vendor_id: vendorId };
                     if (cursor) data.cursor = cursor;
+                    if (currentSearch) data.search = currentSearch;
 
                     $.ajax({
                         url: '{{ route('items.fetch') }}',
@@ -285,6 +292,30 @@
                 var prevCursor = cursorStack.length > 0 ? cursorStack[cursorStack.length - 1] : null;
                 fetchPage(prevCursor);
                 $('html,body').animate({ scrollTop: 0 }, 200);
+            });
+
+            $('#product-search-btn').on('click', function() {
+                var q = $('#product-search-input').val().trim();
+                currentSearch = q;
+                cursorStack = [];
+                nextCursor = null;
+                currentPage = 1;
+                $('#product-search-clear').toggle(q.length > 0);
+                fetchPage(null);
+            });
+
+            $('#product-search-input').on('keypress', function(e) {
+                if (e.which === 13) $('#product-search-btn').click();
+            });
+
+            $('#product-search-clear').on('click', function() {
+                $('#product-search-input').val('');
+                currentSearch = '';
+                cursorStack = [];
+                nextCursor = null;
+                currentPage = 1;
+                $(this).hide();
+                fetchPage(null);
             });
 
             fetchPage(null);
