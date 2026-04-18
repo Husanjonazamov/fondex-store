@@ -1016,6 +1016,63 @@
                 }
                 return h;
             }
+            async function autoAssignRandomCourier(vendorID, orderStatus) {
+                try {
+                    var snapshot = await database.collection('users')
+                        .where('role', '==', 'driver')
+                        .where('isActive', '==', true)
+                        .get();
+
+                    var allDrivers = snapshot.docs.map(function(d) { return d.data(); });
+                    var freeDrives = allDrivers.filter(function(d) {
+                        if (singleOrderReceive) {
+                            return !d.inProgressOrderID || d.inProgressOrderID.length === 0;
+                        }
+                        return true;
+                    });
+
+                    if (freeDrives.length === 0 && allDrivers.length > 0) {
+                        freeDrives = allDrivers; // bosh kuryer yo'q, har qandayiga ber
+                    }
+
+                    if (freeDrives.length === 0) {
+                        console.warn('⚠️ Hech qanday faol kuryer topilmadi (vendorID:', vendorID, '), kuryersiz davom etmoqda');
+                        callWalletTransaction(orderStatus);
+                        return;
+                    }
+
+                    var driverData = freeDrives[Math.floor(Math.random() * freeDrives.length)];
+                    var driverID = driverData.id;
+                    var orderRequestData = (driverData.orderRequestData && driverData.orderRequestData.length) ? driverData.orderRequestData : [];
+                    var inProgressOrderID = (driverData.inProgressOrderID && driverData.inProgressOrderID.length) ? driverData.inProgressOrderID : [];
+                    orderRequestData.push(id);
+                    inProgressOrderID.push(id);
+
+                    await database.collection('users').doc(driverID).update({
+                        'orderRequestData': orderRequestData,
+                        'inProgressOrderID': inProgressOrderID
+                    });
+
+                    await database.collection('vendor_orders').doc(id).update({
+                        'status': 'In Transit',
+                        'driverID': driverID,
+                        'driver': driverData
+                    });
+
+                    console.log('✅ Kuryer tayinlandi:', {
+                        kuryer: driverData.firstName + ' ' + driverData.lastName,
+                        kuryerID: driverID,
+                        orderID: id,
+                        status: 'In Transit',
+                        jami_bosh_kuryerlar: freeDrives.length
+                    });
+                    callWalletTransaction('In Transit');
+                } catch (err) {
+                    console.error('autoAssignRandomCourier xato:', err);
+                    callWalletTransaction(orderStatus);
+                }
+            }
+
             $('#random-courier-btn').click(function() {
                 var freeOptions = $('#deliveryman_list option:not(:disabled):not([value=""])');
                 if (freeOptions.length === 0) {
@@ -1204,12 +1261,7 @@
                     alert("{{ trans('lang.can_not_accept_more_orders') }}");
                     return false;
                 }
-                if (selectedOrderStatus != "Order Rejected" && selectedOrderStatus != "Order Cancelled" && selectedOrderStatus != "In Transit" && selectedOrderStatus != "Order Completed" && isSelfDeliveryByVendor === true) {                
-                    $('#assignDriverModal').modal('show');
-                    return false;
-                }else{
-                    $('#assignDriverModal').modal('hide');
-                }
+                $('#assignDriverModal').modal('hide');
                 if (old_order_status != orderStatus) {
                     if (orderStatus == "Order Placed") {
                         manfcmTokenVendor = fcmTokenVendor;
@@ -1241,15 +1293,11 @@
                                 var endDate = order.scheduleTime.toDate().toDateString() + ' ' + order.scheduleTime.toDate().toLocaleTimeString('en-US');
                                 var startDate = windowStart.toDateString() + ' ' + windowStart.toLocaleTimeString('en-US');
                                 if (now >= windowStart && now <= windowEnd) {
-                                    if (isSelfDeliveryGlobally && isSelfDeliveryByVendor && !orderTakeAwayOption) {
-                                        if (orderStatus != "Order Rejected" && orderStatus != "Order Cancelled") {
-                                            $('#assignDriverModal').modal('show');
-                                            return false;
-                                        }else{
-                                            $('#assignDriverModal').modal('hide');
-                                        }
+                                    if (!orderTakeAwayOption) {
+                                        await autoAssignRandomCourier(order.vendorID, orderStatus);
+                                        return;
                                     } else {
-                                        $('#addPreparationTimeModal').modal('show');
+                                        callWalletTransaction(orderStatus);
                                     }
                                 } else if (now < windowStart) {
                                     alert("{{ trans('lang.you_can_accept_order_between') }}" + startDate + ' - ' + endDate); // too early
@@ -1259,18 +1307,9 @@
                                     return false;
                                 }
                             } else {
-                                if (service_type != undefined && service_type != '' &&
-                                    service_type == "delivery-service" && delivery_enable) {
-                                    if (isSelfDeliveryGlobally && isSelfDeliveryByVendor && !orderTakeAwayOption) {
-                                        if (orderStatus != "Order Rejected" && orderStatus != "Order Cancelled") {
-                                            $('#assignDriverModal').modal('show');
-                                            return false;
-                                        }else{
-                                            $('#assignDriverModal').modal('hide');
-                                        }
-                                    } else {
-                                        $('#addPreparationTimeModal').modal('show');
-                                    }
+                                if (!orderTakeAwayOption) {
+                                    await autoAssignRandomCourier(order.vendorID, orderStatus);
+                                    return;
                                 } else {
                                     callWalletTransaction(orderStatus);
                                 }
