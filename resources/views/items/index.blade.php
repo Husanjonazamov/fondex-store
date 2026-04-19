@@ -215,12 +215,12 @@
             function buildRow(item) {
                 var finalPrice = (item.disPrice && parseFloat(item.disPrice) > 0) ? item.disPrice : item.price;
                 var createdAt  = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
-                var routeEdit  = '{{ route('items.edit', ':id') }}'.replace(':id', item.id);
+                var routeEdit  = '{{ route('items.edit', ':id') }}'.replace(':id', item.id) + '?backend_id=' + encodeURIComponent(item.backend_id || '');
                 var img        = '<img class="rounded" style="width:50px" src="' + (item.photo || placeholderImage) + '" onerror="this.src=\'' + placeholderImage + '\'">';
                 var nameCol    = img + '<a href="' + routeEdit + '" class="left_space">' + (item.name || '') + '</a>';
                 var catName    = categoryMap[item.categoryID] || item.category || '';
                 var pubCol     = item.publish === 'Yes' ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>';
-                var actCol     = '<span class="action-btn"><a href="' + routeEdit + '"><i class="mdi mdi-lead-pencil"></i></a><a id="' + item.id + '" name="item-delete" href="javascript:void(0)"><i class="mdi mdi-delete"></i></a></span>';
+                var actCol     = '<span class="action-btn"><a href="' + routeEdit + '"><i class="mdi mdi-lead-pencil"></i></a><a id="' + item.id + '" data-backend-id="' + (item.backend_id || item.id) + '" name="item-delete" href="javascript:void(0)"><i class="mdi mdi-delete"></i></a></span>';
                 return [nameCol, parseFloat(finalPrice) || 0, catName, pubCol, createdAt, actCol];
             }
 
@@ -389,24 +389,34 @@
 
         $(document).on("click", "a[name='item-delete']", async function(e) {
             if (!confirm("Mahsulotni o'chirmoqchimisiz?")) return;
-            const id = this.id;
+            const firestoreId = this.id;
+            const backendId = $(this).data('backend-id') || firestoreId;
             const $btn = $(this);
             $btn.css('opacity', '0.5').css('pointer-events', 'none');
 
             // Delete from external API
             try {
-                await $.ajax({
+                var apiResult = await $.ajax({
                     url: '{{ route('items.delete') }}',
-                    type: 'DELETE',
-                    data: { product_id: id, _token: '{{ csrf_token() }}' },
+                    type: 'POST',
+                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    data: { product_id: backendId, _method: 'DELETE' },
                     dataType: 'json'
                 });
+                console.log('API delete OK:', apiResult);
             } catch (err) {
-                console.warn('API delete failed, continuing with Firestore delete', err);
+                console.error('API delete xato:', err.status, err.responseText);
             }
 
-            // Delete from Firestore
-            await deleteDocumentWithImage('vendor_products', id, 'photo', 'photos');
+            // Delete from Firestore (agar Firestore ID bo'lsa)
+            try {
+                if (firestoreId) {
+                    await deleteDocumentWithImage('vendor_products', firestoreId, 'photo', 'photos');
+                }
+            } catch (err) {
+                console.warn('Firestore delete xato (davom etmoqda):', err);
+            }
+
             window.location = "{{ url()->current() }}";
         });
 

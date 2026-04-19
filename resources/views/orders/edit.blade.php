@@ -1043,6 +1043,7 @@
 
                     var driverData = freeDrives[Math.floor(Math.random() * freeDrives.length)];
                     var driverID = driverData.id;
+                    fcmTokenDriver = driverData.fcmToken || '';
                     var orderRequestData = (driverData.orderRequestData && driverData.orderRequestData.length) ? driverData.orderRequestData : [];
                     var inProgressOrderID = (driverData.inProgressOrderID && driverData.inProgressOrderID.length) ? driverData.inProgressOrderID : [];
                     orderRequestData.push(id);

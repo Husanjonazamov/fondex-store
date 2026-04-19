@@ -306,6 +306,7 @@
 
     <script>
         var productId = "<?php echo $id; ?>";
+        var backendId = "<?php echo request()->query('backend_id', ''); ?>";
         var database = firebase.firestore();
         var ref = database.collection('vendor_products').where("id", "==", productId);
         var storage = firebase.storage();
@@ -410,9 +411,15 @@
 
             ref.get().then(async function(snapshots) {
                 if (snapshots.empty) {
-                    console.error("Product not found in Firestore.");
-                    jQuery("#data-table_processing").hide();
-                    return;
+                    // where("id") bo'sh - document ID bilan ko'rib ko'ramiz
+                    var docSnap = await database.collection('vendor_products').doc(productId).get();
+                    if (docSnap.exists) {
+                        snapshots = { empty: false, docs: [docSnap] };
+                    } else {
+                        console.error("Product not found in Firestore. productId:", productId, "backendId:", backendId);
+                        jQuery("#data-table_processing").hide();
+                        return;
+                    }
                 }
                 var product = snapshots.docs[0].data();
 
