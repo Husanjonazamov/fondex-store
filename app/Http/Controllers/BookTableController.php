@@ -55,10 +55,25 @@ class BookTableController extends Controller
                             'title' => $request->subject,
                             'body' => $request->message,
                         ],
+                        'android' => [
+                            'priority' => 'HIGH',
+                            'notification' => [
+                                'sound' => 'default',
+                                'channel_id' => 'high_importance_channel',
+                            ],
+                        ],
+                        'apns' => [
+                            'payload' => [
+                                'aps' => [
+                                    'sound' => 'default',
+                                ],
+                            ],
+                        ],
                         'data' => [
                             'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
                             'id' => '1',
                             'status' => 'done',
+                            'sound' => 'default',
                         ],
                         'token' => $fcm_token,
                     ],
@@ -105,4 +120,3 @@ class BookTableController extends Controller
         return response()->json($response);
     }
 }
-

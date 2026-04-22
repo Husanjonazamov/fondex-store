@@ -206,7 +206,7 @@
             }
 
             var categoryMap  = {};
-            var cursorStack  = [];   // history of cursors for "prev"
+            var cursorStack  = [null];   // cursor used by each loaded page
             var nextCursor   = null;
             var currentPage  = 1;
             var totalLoaded  = 0;
@@ -224,8 +224,13 @@
                 return [nameCol, parseFloat(finalPrice) || 0, catName, pubCol, createdAt, actCol];
             }
 
+            function renderItems(items) {
+                itemTable.clear();
+                itemTable.rows.add(items.map(buildRow)).draw();
+            }
+
             function renderPagination(hasNext) {
-                var hasPrev = cursorStack.length > 0;
+                var hasPrev = currentPage > 1;
                 var html = '';
                 html += '<li class="page-item' + (!hasPrev ? ' disabled' : '') + '"><a class="page-link" href="#" id="btn-prev">&laquo; Oldingi</a></li>';
                 html += '<li class="page-item active"><span class="page-link">' + currentPage + '</span></li>';
@@ -255,7 +260,7 @@
                             var items = response.results || [];
                             nextCursor = response.next_cursor || null;
 
-                            itemTable.rows.add(items.map(buildRow)).draw();
+                            renderItems(items);
                             jQuery("#data-table_processing").hide();
                             renderPagination(response.has_next);
 
@@ -264,6 +269,7 @@
                                 database.collection('vendor_categories').where('id', 'in', catIds.slice(0, 10)).get()
                                     .then(function(snap) {
                                         snap.forEach(function(d){ categoryMap[d.data().id] = d.data().title || d.data().name || ''; });
+                                        renderItems(items);
                                     }).catch(function(){});
                             }
                         },
@@ -286,10 +292,10 @@
 
             $(document).on('click', '#btn-prev', function(e) {
                 e.preventDefault();
-                if (cursorStack.length === 0) return;
+                if (currentPage <= 1) return;
                 cursorStack.pop();
                 currentPage--;
-                var prevCursor = cursorStack.length > 0 ? cursorStack[cursorStack.length - 1] : null;
+                var prevCursor = cursorStack[cursorStack.length - 1] || null;
                 fetchPage(prevCursor);
                 $('html,body').animate({ scrollTop: 0 }, 200);
             });
@@ -297,7 +303,7 @@
             $('#product-search-btn').on('click', function() {
                 var q = $('#product-search-input').val().trim();
                 currentSearch = q;
-                cursorStack = [];
+                cursorStack = [null];
                 nextCursor = null;
                 currentPage = 1;
                 $('#product-search-clear').toggle(q.length > 0);
@@ -311,7 +317,7 @@
             $('#product-search-clear').on('click', function() {
                 $('#product-search-input').val('');
                 currentSearch = '';
-                cursorStack = [];
+                cursorStack = [null];
                 nextCursor = null;
                 currentPage = 1;
                 $(this).hide();

@@ -475,40 +475,48 @@
 
             vendor_categories.get().then(async function(snapshots) {
                 console.log("DEBUG: Categories fetch completed. Snapshots size: " + (snapshots ? snapshots.size : "NULL/UNDEFINED"));
+                categories_list = [];
                 if (snapshots && snapshots.size > 0) {
                     snapshots.docs.forEach((listval) => {
-                        var data = listval.data();
-                        categories_list.push(data);
-                        console.log("DEBUG: Appending category: " + data.title + " (id: " + data.id + ")");
-                        $('#item_category').append($("<option></option>")
-                            .attr("value", data.id)
-                            .text(data.title));
+                        categories_list.push(listval.data());
                     });
                 } else {
                     console.log("DEBUG: No categories found in Firestore.");
                 }
-                
-                // Force UI refresh for potential Select2/Chosen
+
+                var vendorCategoryIDs = [];
+                if (vandorId) {
+                    try {
+                        var vendorSnapshot = await database.collection('vendors').doc(vandorId).get();
+                        if (!vendorSnapshot.exists) {
+                            var vendorById = await database.collection('vendors').where('id', '==', vandorId).limit(1).get();
+                            if (!vendorById.empty) {
+                                vendorSnapshot = vendorById.docs[0];
+                            }
+                        }
+                        if (vendorSnapshot.exists) {
+                            var vendorData = vendorSnapshot.data();
+                            vendorCategoryIDs = Array.isArray(vendorData.categoryID) ? vendorData.categoryID : [];
+                        }
+                    } catch (error) {
+                        console.warn("DEBUG: Could not fetch vendor categories:", error);
+                    }
+                }
+
+                var visibleCategories = vendorCategoryIDs.length > 0
+                    ? categories_list.filter((val) => vendorCategoryIDs.includes(val.id))
+                    : categories_list;
+
+                $('#item_category').find('option:not(:first)').remove();
+                visibleCategories.forEach((val) => {
+                    $('#item_category').append($("<option></option>")
+                        .attr("value", val.id)
+                        .text(val.title || val.name || val.id));
+                });
+
                 $('#item_category').trigger('change');
                 if ($('#item_category').hasClass('select2-hidden-accessible')) {
                     $('#item_category').select2('destroy').select2();
-                }
-
-                if (vandorId) {
-                    database.collection('vendors').doc(vandorId).get().then(async function(snapshot) {
-                         if (snapshot.exists) {
-                            var data = snapshot.data();
-                            var categoryIDs = []
-                            categoryIDs = data.categoryID;
-                            categories_list.forEach((val) => {
-                                if (categoryIDs.includes(val.id)) {
-                                    $('#item_category').append($("<option></option>")
-                                        .attr("value", val.id)
-                                        .text(val.title));
-                                }
-                            })
-                        }
-                    })
                 }
             });
 
@@ -1148,9 +1156,7 @@
             variant_photos = [];
             variant_vIds = [];
             variant_filename = [];
-            var item_attribute = $("#item_attribute").map(function(idx, ele) {
-                return $(ele).val();
-            }).get();
+            var item_attribute = $("#item_attribute").val() || [];
 
             if (item_attribute.length > 0) {
 
@@ -1197,7 +1203,7 @@
                             '" min="0" class="form-control">';
                         html += '</td>';
                         html += '<td>';
-                        var check_variant_qty = $('#price_' + variant).val() ? $('#price_' + variant).val() : -1;
+                        var check_variant_qty = $('#qty_' + variant).val() ? $('#qty_' + variant).val() : -1;
                         html += '<input type="number" id="qty_' + variant + '" value="' + check_variant_qty +
                             '" min="-1" class="form-control">';
                         html += '</td>';

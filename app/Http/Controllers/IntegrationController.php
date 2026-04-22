@@ -144,9 +144,16 @@ class IntegrationController extends Controller
             $cursor = $request->cursor ?? null;
 
             if ($cursor) {
-                // Following a cursor — cursor URL already has offset info, just add vendor
-                $url    = $this->apiUrl . '/products/';
-                $params = ['vendor' => $firestoreVendorId, 'cursor' => $cursor];
+                $url = $this->apiUrl . '/products/';
+                if (str_starts_with($cursor, 'offset:')) {
+                    $params = [
+                        'vendor' => $firestoreVendorId,
+                        'limit'  => 20,
+                        'offset' => (int) substr($cursor, strlen('offset:')),
+                    ];
+                } else {
+                    $params = ['vendor' => $firestoreVendorId, 'cursor' => $cursor];
+                }
             } else {
                 $url    = $this->apiUrl . '/products/';
                 $params = ['vendor' => $firestoreVendorId, 'limit' => 20];
@@ -170,7 +177,7 @@ class IntegrationController extends Controller
             if ($rawNext) {
                 $query = parse_url($rawNext, PHP_URL_QUERY);
                 parse_str($query ?? '', $qp);
-                $nextCursor = $qp['cursor'] ?? null;
+                $nextCursor = $qp['cursor'] ?? (isset($qp['offset']) ? 'offset:' . $qp['offset'] : null);
             }
 
             \Log::info('getProducts done', ['count' => count($rawList), 'next_cursor' => $nextCursor]);

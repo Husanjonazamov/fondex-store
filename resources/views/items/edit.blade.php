@@ -1314,9 +1314,7 @@
             }
 
             var html = '';
-            var item_attribute = $("#item_attribute").map(function(idx, ele) {
-                return $(ele).val();
-            }).get();
+            var item_attribute = $("#item_attribute").val() || [];
 
             if (item_attribute.length > 0) {
 
