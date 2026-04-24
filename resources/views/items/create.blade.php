@@ -127,6 +127,9 @@
                             </div>
 
                             <div class="form-group row width-100" id="attributes_div_values">
+                                <div class="col-12 px-0 mb-2">
+                                    <label class="control-label font-weight-bold">Atribut qiymatlari</label>
+                                </div>
                                 <div class="item_attributes" id="item_attributes"></div>
                                 <div class="item_variants" id="item_variants"></div>
                                 <input type="hidden" id="attributes" value="" />
@@ -507,6 +510,12 @@
                     ? categories_list.filter((val) => vendorCategoryIDs.includes(val.id))
                     : categories_list;
 
+                visibleCategories = visibleCategories.filter((val) => val && val.id && (val.publish === undefined || val.publish === true));
+
+                if (visibleCategories.length === 0) {
+                    visibleCategories = categories_list.filter((val) => val && val.id && (val.publish === undefined || val.publish === true));
+                }
+
                 $('#item_category').find('option:not(:first)').remove();
                 visibleCategories.forEach((val) => {
                     $('#item_category').append($("<option></option>")
@@ -845,6 +854,9 @@
                                         fd.append('section_id', section_id);
                                         fd.append('id', id);
                                         fd.append('vendorID', vandorId);
+                                        fd.append('attributes', JSON.stringify(attributes));
+                                        fd.append('variants', JSON.stringify(variants));
+                                        fd.append('item_attribute', JSON.stringify(item_attribute || {}));
                                         console.log('[syncProduct] productImageFile:', productImageFile);
                                         if (productImageFile) {
                                             fd.append('image', productImageFile, productImageFile.name);
@@ -1057,9 +1069,19 @@
         async function getVendorId(vendorUser) {
             var vendorData = null;
             try {
-                const vendorSnapshots = await database.collection('vendors').where('author', "==", vendorUser).get();
+                const vendorSnapshots = await database.collection('vendors').where('author', "==", vendorUser).limit(1).get();
                 if (!vendorSnapshots.empty) {
                     vendorData = vendorSnapshots.docs[0].data();
+                } else {
+                    const vendorById = await database.collection('vendors').where('id', "==", vendorUser).limit(1).get();
+                    if (!vendorById.empty) {
+                        vendorData = vendorById.docs[0].data();
+                    } else {
+                        const vendorDoc = await database.collection('vendors').doc(vendorUser).get();
+                        if (vendorDoc.exists) {
+                            vendorData = vendorDoc.data();
+                        }
+                    }
                 }
             } catch (error) {
                 console.error("Error in getVendorId:", error);
@@ -1184,6 +1206,7 @@
                     var variants = getCombinations(attributeSet);
                     $('#variants').val(JSON.stringify(variants));
 
+                    html += '<div class="mb-2"><label class="control-label font-weight-bold">Variantlar</label></div>';
                     html += '<table class="table table-bordered">';
                     html += '<thead class="thead-light">';
                     html += '<tr>';

@@ -169,13 +169,13 @@ $(document).ready(function() {
 });
 
 
-   function buildHTML(snapshots){
+function buildHTML(snapshots){
         var html='';
         var alldata=[];
         var number= [];
         snapshots.docs.forEach((listval) => {
             var datas=listval.data();
-            datas.id=listval.id;
+            datas.id=datas.id ? datas.id : listval.id;
              
             alldata.push(datas);
         });
@@ -192,23 +192,18 @@ $(document).ready(function() {
                 var id = val.id;
                 var route1 =  '{{route("users.edit",":id")}}';
                 route1 = route1.replace(':id', id);
+                var firstName = val.firstName ? val.firstName : '';
+                var lastName = val.lastName ? val.lastName : '';
+                var email = val.email ? val.email : '';
+                var role = val.role ? val.role : '-';
+                var photo = (val.profilePictureURL && val.profilePictureURL !== '') ? val.profilePictureURL : placeholderImage;
 
-                if(val.profilePictureURL == ''){
-                  
-                      html=html+'<td><img class="rounded" style="width:50px" src="'+placeholderImage+'" alt="image"></td>';
-                }else{
-                    if(val.profilePictureURL){
-                        photo=val.profilePictureURL;
-                    }else{
-                        photo=placeholderImage;
-                    }
-                  html=html+'<td><img class="rounded" style="width:50px" src="'+photo+'" onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" alt="image"></td>';
-                }
+                html=html+'<td><img class="rounded" style="width:50px" src="'+photo+'" onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" alt="image"></td>';
                 
-                html=html+'<td>'+val.firstName+' '+val.lastName+'</td>';
+                html=html+'<td>'+(firstName+' '+lastName).trim()+'</td>';
                 
-                html=html+'<td>'+val.email+'</td>';
-                html=html+'<td>'+val.role+'</td>';
+                html=html+'<td>'+email+'</td>';
+                html=html+'<td>'+role+'</td>';
     
                 html=html+'<td class="action-btn"><a href="'+route1+'"><i class="fa fa-edit"></i></a><a id="'+val.id+'" name="user-delete" href="javascript:void(0)"><i class="fa fa-trash"></i></a></td>';
                             
@@ -307,9 +302,8 @@ function searchclear(){
 
 
 function searchtext(){
-
-  
-  
+  endarray = [];
+  start = null;
   append_list.innerHTML='';  
 
     if(jQuery("#selected_search").val()=='first_name' && jQuery("#search").val().trim()!=''){
@@ -345,6 +339,8 @@ function searchtext(){
 
             jQuery("#data-table_paginate").show();
         }
+    } else {
+        jQuery("#data-table_paginate").hide();
     }
 }); 
 

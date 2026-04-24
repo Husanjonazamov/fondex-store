@@ -122,6 +122,9 @@
                                 </div>
 
                                 <div class="form-group row width-100" id="attributes_div_values">
+                                    <div class="col-12 px-0 mb-2">
+                                        <label class="control-label font-weight-bold">Atribut qiymatlari</label>
+                                    </div>
                                     <div class="item_attributes" id="item_attributes"></div>
                                     <div class="item_variants" id="item_variants"></div>
                                     <input type="hidden" id="attributes" value="" />
@@ -340,6 +343,55 @@
         var section_flag = '';
         var allowed_file_size = '';
         var categories_list = [];
+
+        function normalizeProductData(product, fallbackFirestoreId = '') {
+            if (!product) {
+                return null;
+            }
+
+            if (typeof product.item_attribute === 'string' && product.item_attribute !== '') {
+                try {
+                    product.item_attribute = JSON.parse(product.item_attribute);
+                } catch (e) {
+                    product.item_attribute = null;
+                }
+            }
+
+            product.id = product.id || fallbackFirestoreId || productId;
+            product.photos = Array.isArray(product.photos) ? product.photos : [];
+            product.addOnsTitle = Array.isArray(product.addOnsTitle) ? product.addOnsTitle : [];
+            product.addOnsPrice = Array.isArray(product.addOnsPrice) ? product.addOnsPrice : [];
+            product.product_specification = product.product_specification || {};
+
+            if (!product.photo && product.photos.length > 0) {
+                product.photo = product.photos[0];
+            }
+
+            return product;
+        }
+
+        async function fetchProductFromBackend() {
+            if (!backendId) {
+                return null;
+            }
+
+            try {
+                const response = await $.ajax({
+                    url: '{{ route('items.fetch.one', ':id') }}'.replace(':id', backendId),
+                    type: 'GET',
+                    dataType: 'json'
+                });
+
+                if (response && response.success && response.data) {
+                    return normalizeProductData(response.data, productId);
+                }
+            } catch (error) {
+                console.error('Backend product fetch failed:', error);
+            }
+
+            return null;
+        }
+
         placeholder.get().then(async function(snapshotsimage) {
             var placeholderImageData = snapshotsimage.data();
             placeholderImage = placeholderImageData.image;
@@ -410,18 +462,26 @@
             jQuery("#data-table_processing").show();
 
             ref.get().then(async function(snapshots) {
+                var product = null;
+
                 if (snapshots.empty) {
                     // where("id") bo'sh - document ID bilan ko'rib ko'ramiz
                     var docSnap = await database.collection('vendor_products').doc(productId).get();
                     if (docSnap.exists) {
                         snapshots = { empty: false, docs: [docSnap] };
                     } else {
-                        console.error("Product not found in Firestore. productId:", productId, "backendId:", backendId);
-                        jQuery("#data-table_processing").hide();
-                        return;
+                        product = await fetchProductFromBackend();
+                        if (!product) {
+                            console.error("Product not found in Firestore or backend. productId:", productId, "backendId:", backendId);
+                            jQuery("#data-table_processing").hide();
+                            $(".error_top").show().html("<p>Mahsulot topilmadi</p>");
+                            return;
+                        }
                     }
                 }
-                var product = snapshots.docs[0].data();
+                if (!product) {
+                    product = normalizeProductData(snapshots.docs[0].data(), snapshots.docs[0].id);
+                }
 
                 if (product.hasOwnProperty('product_specification')) {
 
@@ -466,9 +526,19 @@
                     }
                 }
 
-                await database.collection('vendors').where('id', "==", product.vendorID).get().then(async function(vendorSnapshots) {
+                await database.collection('vendors').where('id', "==", product.vendorID).limit(1).get().then(async function(vendorSnapshots) {
+                    var vendorData = null;
+
                     if (!vendorSnapshots.empty) {
-                        var vendorData = vendorSnapshots.docs[0].data();
+                        vendorData = vendorSnapshots.docs[0].data();
+                    } else {
+                        var vendorDoc = await database.collection('vendors').doc(product.vendorID).get();
+                        if (vendorDoc.exists) {
+                            vendorData = vendorDoc.data();
+                        }
+                    }
+
+                    if (vendorData) {
                         vendorID = vendorData.id;
                         section_id = vendorData.section_id;
 
@@ -517,15 +587,22 @@
                                 var data = listval.data();
                                 categories_list.push(data);
                             });
-                            var categoryIDs = []
-                            categoryIDs = vendorData.categoryID;
-                            categories_list.forEach((val) => {
-                                if (categoryIDs.includes(val.id)) {
+                            var categoryIDs = Array.isArray(vendorData.categoryID) ? vendorData.categoryID : [];
+                            var visibleCategories = categoryIDs.length > 0
+                                ? categories_list.filter((val) => categoryIDs.includes(val.id))
+                                : categories_list;
+
+                            visibleCategories = visibleCategories.filter((val) => val && val.id);
+
+                            if (visibleCategories.length === 0) {
+                                visibleCategories = categories_list.filter((val) => val && val.id);
+                            }
+
+                            visibleCategories.forEach((val) => {
                                     $('#item_category').append($("<option></option>")
                                         .attr("value", val.id)
-                                        .text(val.title));
-                                }
-                            })
+                                        .text(val.title || val.name || val.id));
+                            });
                             $('#item_category').val(product.categoryID);
                         });
 
@@ -847,7 +924,7 @@
                             if (IMG.length > 0) {
                                 photo = IMG[0];
                             }
-                            database.collection('vendor_products').doc(productId).update({
+                            database.collection('vendor_products').doc(productId).set({
                                 'name': name,
                                 'price': price,
                                 'quantity': parseInt(item_quantity),
@@ -873,7 +950,7 @@
                                 'product_specification': product_specification,
                                 'isDigitalProduct': is_digital_product,
                                 'digitalProduct': DigitalImg ? DigitalImg : '',
-                            }).then(function(result) {
+                            }, { merge: true }).then(function(result) {
                                 var fd = new FormData();
                                 fd.append('name', name);
                                 fd.append('price', price);
@@ -887,6 +964,10 @@
                                 fd.append('section_id', section_id);
                                 fd.append('id', productId);
                                 fd.append('vendorID', vendorID);
+                                fd.append('backend_id', backendId);
+                                fd.append('attributes', JSON.stringify(attributes));
+                                fd.append('variants', JSON.stringify(variants));
+                                fd.append('item_attribute', JSON.stringify(item_attribute || {}));
                                 if (productImageFile) {
                                     fd.append('image', productImageFile, productImageFile.name);
                                 }
@@ -1342,6 +1423,7 @@
                     var variants = getCombinations(attributeSet);
                     $('#variants').val(JSON.stringify(variants));
 
+                    html += '<div class="mb-2"><label class="control-label font-weight-bold">Variantlar</label></div>';
                     html += '<div class="mb-2"><input type="text" id="variant_search" class="form-control" placeholder="Variantlarni qidirish..." oninput="filterVariants(this.value)"></div>';
                     html += '<table class="table table-bordered" id="variants_table">';
                     html += '<thead class="thead-light">';

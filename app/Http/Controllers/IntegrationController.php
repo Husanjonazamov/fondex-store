@@ -48,6 +48,22 @@ class IntegrationController extends Controller
                 ['name' => 'is_publish',    'contents' => ($request->publish == 'true' || $request->publish == true || $request->publish == 1) ? 'true' : 'false'],
             ];
 
+            if ($request->filled('item_attribute')) {
+                $itemAttribute = $request->input('item_attribute');
+                if (is_array($itemAttribute)) {
+                    $itemAttribute = json_encode($itemAttribute, JSON_UNESCAPED_UNICODE);
+                }
+                $fields[] = ['name' => 'item_attribute', 'contents' => (string) $itemAttribute];
+            }
+
+            if ($request->filled('attributes')) {
+                $fields[] = ['name' => 'attributes', 'contents' => (string) $request->input('attributes')];
+            }
+
+            if ($request->filled('variants')) {
+                $fields[] = ['name' => 'variants', 'contents' => (string) $request->input('variants')];
+            }
+
             // Attach uploaded image file directly
             \Log::info('syncProduct image check', [
                 'hasFile'    => $request->hasFile('image'),
@@ -151,6 +167,12 @@ class IntegrationController extends Controller
                         'limit'  => 20,
                         'offset' => (int) substr($cursor, strlen('offset:')),
                     ];
+                } elseif (str_starts_with($cursor, 'page:')) {
+                    $params = [
+                        'vendor' => $firestoreVendorId,
+                        'limit'  => 20,
+                        'page'   => (int) substr($cursor, strlen('page:')),
+                    ];
                 } else {
                     $params = ['vendor' => $firestoreVendorId, 'cursor' => $cursor];
                 }
@@ -158,7 +180,12 @@ class IntegrationController extends Controller
                 $url    = $this->apiUrl . '/products/';
                 $params = ['vendor' => $firestoreVendorId, 'limit' => 20];
             }
-            if ($request->search) $params['search'] = $request->search;
+            if ($request->filled('search')) {
+                $search = trim((string) $request->search);
+                $params['search'] = $search;
+                $params['name'] = $search;
+                $params['q'] = $search;
+            }
 
             \Log::info('getProducts fetch', ['vendor' => $firestoreVendorId, 'cursor' => $cursor]);
 
@@ -177,7 +204,9 @@ class IntegrationController extends Controller
             if ($rawNext) {
                 $query = parse_url($rawNext, PHP_URL_QUERY);
                 parse_str($query ?? '', $qp);
-                $nextCursor = $qp['cursor'] ?? (isset($qp['offset']) ? 'offset:' . $qp['offset'] : null);
+                $nextCursor = $qp['cursor']
+                    ?? (isset($qp['offset']) ? 'offset:' . $qp['offset'] : null)
+                    ?? (isset($qp['page']) ? 'page:' . $qp['page'] : null);
             }
 
             \Log::info('getProducts done', ['count' => count($rawList), 'next_cursor' => $nextCursor]);
@@ -210,6 +239,58 @@ class IntegrationController extends Controller
 
         } catch (Exception $e) {
             \Log::error('getProducts error', ['message' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Fetch a single product from external API.
+     */
+    public function getProduct(Request $request, string $id)
+    {
+        try {
+            $resp = Http::withoutVerifying()->timeout(30)->get($this->apiUrl . '/products/' . $id . '/');
+
+            if (!$resp->successful()) {
+                return response()->json(['success' => false, 'message' => 'API Error'], 502);
+            }
+
+            $json = $resp->json();
+            $item = $json['data'] ?? $json;
+
+            if (!is_array($item) || empty($item)) {
+                return response()->json(['success' => false, 'message' => 'Product not found'], 404);
+            }
+
+            $itemAttribute = $item['item_attribute'] ?? null;
+            if (is_string($itemAttribute) && $itemAttribute !== '') {
+                $decoded = json_decode($itemAttribute, true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $itemAttribute = $decoded;
+                }
+            }
+
+            $normalized = [
+                'id' => $item['firestore_id'] ?? '',
+                'backend_id' => $item['id'] ?? $id,
+                'name' => $item['name'] ?? '',
+                'price' => $item['price'] ?? 0,
+                'disPrice' => $item['discount_price'] ?? '0',
+                'photo' => !empty($item['image']) ? str_replace('http://', 'https://', $item['image']) : '',
+                'photos' => $item['images'] ?? [],
+                'vendorID' => $item['vendor'] ?? '',
+                'categoryID' => $item['category'] ?? '',
+                'brandID' => $item['brand'] ?? '',
+                'section_id' => $item['section'] ?? '',
+                'description' => $item['description'] ?? '',
+                'publish' => (bool) ($item['is_publish'] ?? false),
+                'quantity' => $item['quantity'] ?? 0,
+                'item_attribute' => is_array($itemAttribute) ? $itemAttribute : null,
+            ];
+
+            return response()->json(['success' => true, 'data' => $normalized]);
+        } catch (Exception $e) {
+            \Log::error('getProduct error', ['message' => $e->getMessage(), 'product_id' => $id]);
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }

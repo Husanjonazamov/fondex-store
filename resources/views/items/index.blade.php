@@ -59,11 +59,13 @@
                                     <input type="text" id="product-search-input" class="form-control" placeholder="Mahsulot nomini qidirish..." style="max-width:350px;">
                                     <button class="btn btn-primary ml-2" id="product-search-btn"><i class="mdi mdi-magnify"></i> Qidirish</button>
                                     <button class="btn btn-secondary ml-2" id="product-search-clear" style="display:none;">Tozalash</button>
+                                    <button class="btn btn-danger ml-2" id="bulk-delete-btn" style="display:none;"><i class="mdi mdi-delete"></i> Tanlanganlarni o'chirish</button>
                                 </div>
                                 <div class="table-responsive m-t-10">
                                     <table id="itemTable" class="display nowrap table table-hover table-striped table-bordered table table-striped" cellspacing="0" width="100%">
                                         <thead>
                                             <tr>
+                                                <th style="width:40px;"><input type="checkbox" id="select-all-items"></th>
                                                 <th>{{ trans('lang.item_info') }}</th>
                                                 <th>{{ trans('lang.item_price') }}</th>
                                                 <th>{{ trans('lang.item_category_id') }}</th>
@@ -107,6 +109,7 @@
         var subscriptionBusinessModel = database.collection('settings').doc("vendor");
         var date = '';
         var time = '';
+        var selectedItems = {};
 
         subscriptionBusinessModel.get().then(async function(snapshots) {
             var subscriptionSetting = snapshots.data();
@@ -130,8 +133,18 @@
 
             // Try to get vendor ID from vendors collection, fallback to vendorUserId
             try {
-                const vendorSnap = await database.collection('vendors').where('author', '==', vendorUserId).get();
-                vendorId = (!vendorSnap.empty && vendorSnap.docs[0].data().id) ? vendorSnap.docs[0].data().id : vendorUserId;
+                const vendorSnap = await database.collection('vendors').where('author', '==', vendorUserId).limit(1).get();
+                if (!vendorSnap.empty && vendorSnap.docs[0].data().id) {
+                    vendorId = vendorSnap.docs[0].data().id;
+                } else {
+                    const vendorById = await database.collection('vendors').where('id', '==', vendorUserId).limit(1).get();
+                    if (!vendorById.empty && vendorById.docs[0].data().id) {
+                        vendorId = vendorById.docs[0].data().id;
+                    } else {
+                        const vendorDoc = await database.collection('vendors').doc(vendorUserId).get();
+                        vendorId = vendorDoc.exists && vendorDoc.data().id ? vendorDoc.data().id : vendorUserId;
+                    }
+                }
             } catch(e) {
                 vendorId = vendorUserId;
             }
@@ -194,8 +207,8 @@
                     searching:  false,
                     processing: false,
                     serverSide: false,
-                    columnDefs: [{ orderable: false, targets: [0, 3, 5] }],
-                    order: [[4, 'asc']],
+                    columnDefs: [{ orderable: false, targets: [0, 1, 4, 6] }],
+                    order: [[5, 'asc']],
                     language: {
                         zeroRecords: "{{ trans('lang.no_record_found') }}",
                         emptyTable:  "{{ trans('lang.no_record_found') }}",
@@ -212,6 +225,12 @@
             var totalLoaded  = 0;
             var currentSearch = '';
 
+            window.updateBulkDeleteState = function() {
+                var ids = Object.keys(selectedItems);
+                $('#bulk-delete-btn').toggle(ids.length > 0);
+                $('#select-all-items').prop('checked', ids.length > 0 && $('.item-select').length > 0 && $('.item-select:checked').length === $('.item-select').length);
+            }
+
             function buildRow(item) {
                 var finalPrice = (item.disPrice && parseFloat(item.disPrice) > 0) ? item.disPrice : item.price;
                 var createdAt  = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
@@ -221,12 +240,15 @@
                 var catName    = categoryMap[item.categoryID] || item.category || '';
                 var pubCol     = item.publish === 'Yes' ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>';
                 var actCol     = '<span class="action-btn"><a href="' + routeEdit + '"><i class="mdi mdi-lead-pencil"></i></a><a id="' + item.id + '" data-backend-id="' + (item.backend_id || item.id) + '" name="item-delete" href="javascript:void(0)"><i class="mdi mdi-delete"></i></a></span>';
-                return [nameCol, parseFloat(finalPrice) || 0, catName, pubCol, createdAt, actCol];
+                var checked    = selectedItems[item.id] ? ' checked' : '';
+                var selectCol  = '<input type="checkbox" class="item-select" data-id="' + item.id + '" data-backend-id="' + (item.backend_id || item.id) + '"' + checked + '>';
+                return [selectCol, nameCol, parseFloat(finalPrice) || 0, catName, pubCol, createdAt, actCol];
             }
 
             function renderItems(items) {
                 itemTable.clear();
                 itemTable.rows.add(items.map(buildRow)).draw();
+                updateBulkDeleteState();
             }
 
             function renderPagination(hasNext) {
@@ -327,6 +349,67 @@
             fetchPage(null);
         })
 
+        $(document).on('change', '.item-select', function() {
+            var id = $(this).data('id');
+            var backendId = $(this).data('backend-id');
+            if ($(this).is(':checked')) {
+                selectedItems[id] = { firestoreId: id, backendId: backendId };
+            } else {
+                delete selectedItems[id];
+            }
+            updateBulkDeleteState();
+        });
+
+        $(document).on('change', '#select-all-items', function() {
+            var checked = $(this).is(':checked');
+            $('.item-select').each(function() {
+                $(this).prop('checked', checked).trigger('change');
+            });
+        });
+
+        async function deleteSingleItem(firestoreId, backendId) {
+            if (backendId) {
+                try {
+                    await $.ajax({
+                        url: '{{ route('items.delete') }}',
+                        type: 'POST',
+                        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                        data: { product_id: backendId, _method: 'DELETE' },
+                        dataType: 'json'
+                    });
+                } catch (err) {
+                    console.error('API delete xato:', err.status, err.responseText);
+                }
+            }
+
+            if (firestoreId) {
+                try {
+                    await deleteDocumentWithImage('vendor_products', firestoreId, 'photo', 'photos');
+                } catch (err) {
+                    console.warn('Firestore delete xato:', err);
+                }
+            }
+        }
+
+        $(document).on('click', '#bulk-delete-btn', async function() {
+            var ids = Object.keys(selectedItems);
+            if (!ids.length) return;
+            if (!confirm(ids.length + " ta mahsulotni o'chirmoqchimisiz?")) return;
+
+            jQuery("#data-table_processing").show();
+            $('#bulk-delete-btn').prop('disabled', true);
+
+            for (const id of ids) {
+                const item = selectedItems[id];
+                await deleteSingleItem(item.firestoreId, item.backendId);
+            }
+
+            selectedItems = {};
+            $('#select-all-items').prop('checked', false);
+            $('#bulk-delete-btn').prop('disabled', false).hide();
+            window.location = "{{ url()->current() }}";
+        });
+
         async function buildHTML(val) {
             var html = [];
 
@@ -399,29 +482,7 @@
             const backendId = $(this).data('backend-id') || firestoreId;
             const $btn = $(this);
             $btn.css('opacity', '0.5').css('pointer-events', 'none');
-
-            // Delete from external API
-            try {
-                var apiResult = await $.ajax({
-                    url: '{{ route('items.delete') }}',
-                    type: 'POST',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-                    data: { product_id: backendId, _method: 'DELETE' },
-                    dataType: 'json'
-                });
-                console.log('API delete OK:', apiResult);
-            } catch (err) {
-                console.error('API delete xato:', err.status, err.responseText);
-            }
-
-            // Delete from Firestore (agar Firestore ID bo'lsa)
-            try {
-                if (firestoreId) {
-                    await deleteDocumentWithImage('vendor_products', firestoreId, 'photo', 'photos');
-                }
-            } catch (err) {
-                console.warn('Firestore delete xato (davom etmoqda):', err);
-            }
+            await deleteSingleItem(firestoreId, backendId);
 
             window.location = "{{ url()->current() }}";
         });

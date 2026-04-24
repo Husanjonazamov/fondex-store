@@ -171,7 +171,21 @@ var photo ="";
 
 $(document).ready(function(){
   ref.get().then( async function(snapshots){
-var user = snapshots.docs[0].data();
+var user = null;
+
+if(snapshots.docs.length > 0){
+  user = snapshots.docs[0].data();
+} else {
+  var userDoc = await database.collection('users').doc(id).get();
+  if (userDoc.exists) {
+    user = userDoc.data();
+  }
+}
+
+if(!user){
+  jQuery("#data-table_processing").hide();
+  return;
+}
 
 $(".user_first_name").val(user.firstName);
 
