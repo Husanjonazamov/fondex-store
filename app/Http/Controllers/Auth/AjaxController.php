@@ -1,150 +1,72 @@
 <?php
 
-/**
-
- * File name: AjaxController.php
-
- * Last modified: 2022.06.11 at 16:10:52
-
- * Author:Siddhi
-
- * Copyright (c) 2022
-
- */
-
-
-
 namespace App\Http\Controllers\Auth;
 
-
-
-use App\Models\VendorUsers;
-
-use App\Models\User;
-
-use Illuminate\Support\Facades\Hash;
-
-use Illuminate\Support\Facades\DB;
-
-use Illuminate\Support\Facades\Auth;
-
-use Illuminate\Http\Request;
-
 use App\Http\Controllers\Controller;
-
-use Illuminate\Foundation\Auth\AuthenticatesUsers;
-
 use App\Http\Services\SmsServices;
-
-use Laravel\Socialite\Facades\Socialite;
-
-use Prettus\Validator\Exceptions\ValidatorException;
-
-
+use App\Models\User;
+use App\Models\VendorUsers;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class AjaxController extends Controller
-
 {
-
-
-
-
-
-    public function setToken(Request $request){
-
-        $isSubscribed = $request->isSubscribed;
-
-        $userId = $request->userId;
-
+    public function setToken(Request $request)
+    {
         $uuid = $request->id;
+        $email = trim((string) $request->email);
+        $password = (string) $request->password;
+        $passwordToStore = $password !== '' ? $password : Str::random(32);
 
-        $password=$request->password;
-
-        $exist = VendorUsers::where('email',$request->email )->get();
-
-        $data = $exist->isEmpty();
-
-       
-
-        if($exist->isEmpty()){
-
-           
-
-            $user=User::create([
-
-                'name' => $request->email,
-
-                'email' => $request->email,
-
-                'password' => Hash::make($password),
-
-                'isSubscribed' => $request->isSubscribed
-
+        $user = User::where('email', $email)->first();
+        if (!$user) {
+            $user = User::create([
+                'name' => $email,
+                'email' => $email,
+                'password' => Hash::make($passwordToStore),
+                'isSubscribed' => $request->isSubscribed,
             ]);
-
-
-
-             DB::table('vendor_users')->insert([
-
-                'user_id' => $user->id,
-
-                'uuid' => $uuid,
-
-                'email' => $request->email,
-
+        } else {
+            $user->update([
+                'isSubscribed' => ($request->isSubscribed == null) ? '' : $request->isSubscribed,
             ]);
-
-           
-
-
-
-        }else {
-            $user = DB::table('vendor_users')->select('id')->where('email', $request->email)->first();
-                    DB::table('vendor_users')->where('id', $user->id)
-                    ->update([
-                    'uuid' => $uuid,
-                    'email' => $request->email
-                    ]);
-
         }
 
-        User::where('email', $request->email)->update([
+        $vendorUser = VendorUsers::where('email', $email)->first();
+        if (!$vendorUser) {
+            DB::table('vendor_users')->insert([
+                'user_id' => $user->id,
+                'uuid' => $uuid,
+                'email' => $email,
+            ]);
+        } else {
+            DB::table('vendor_users')
+                ->where('id', $vendorUser->id)
+                ->update([
+                    'user_id' => $user->id,
+                    'uuid' => $uuid,
+                    'email' => $email,
+                ]);
+        }
 
-            'isSubscribed' => ($request->isSubscribed == null) ? '' : $request->isSubscribed
+        Auth::login($user, true);
 
-        ]);
-
-        $user = User::where('email',$request->email)->first();
-
-    
-
-       Auth::login($user,true);
-
-       $data = array();
-
-       if(Auth::check()){
-
-
-
+        $data = [];
+        if (Auth::check()) {
             $data['access'] = true;
-
-       }
-
-
-
-       
+        }
 
         return $data;
-
     }
 
     public function sendOtp(Request $request)
     {
-        $phone = $request->phone; // e.g. "+998901234567"
-
+        $phone = $request->phone;
         $otp = rand(100000, 999999);
 
-        // OTP ni session ga saqlaymiz (5 daqiqa)
         session(["otp_$phone" => $otp, "otp_time_$phone" => now()->timestamp]);
 
         try {
@@ -158,9 +80,9 @@ class AjaxController extends Controller
     public function verifyOtp(Request $request)
     {
         $phone = $request->phone;
-        $otp   = $request->otp;
+        $otp = $request->otp;
 
-        $savedOtp  = session("otp_$phone");
+        $savedOtp = session("otp_$phone");
         $savedTime = session("otp_time_$phone");
 
         if (!$savedOtp) {
@@ -171,11 +93,10 @@ class AjaxController extends Controller
             return response()->json(['success' => false, 'message' => 'OTP muddati tugagan (5 daqiqa).'], 422);
         }
 
-        if ((string)$savedOtp !== (string)$otp) {
+        if ((string) $savedOtp !== (string) $otp) {
             return response()->json(['success' => false, 'message' => 'OTP noto\'g\'ri.'], 422);
         }
 
-        // OTP to'g'ri - sessiondan o'chiramiz
         session()->forget(["otp_$phone", "otp_time_$phone"]);
 
         return response()->json(['success' => true]);
@@ -187,6 +108,7 @@ class AjaxController extends Controller
         if (!$user) {
             return response()->json(['success' => false], 401);
         }
+
         DB::table('vendor_users')
             ->where('user_id', $user->id)
             ->update(['firestore_vendor_id' => $request->firestore_vendor_id]);
@@ -195,73 +117,37 @@ class AjaxController extends Controller
     }
 
     public function setSubcriptionFlag(Request $request)
-
     {
         session_write_close();
 
         User::where('email', $request->email)->update([
-
-            'isSubscribed' => $request->isSubscribed
-
+            'isSubscribed' => $request->isSubscribed,
         ]);
 
-
-
-        $data = array();
-
+        $data = [];
         if (Auth::check()) {
-
             $data['access'] = true;
-
         }
-
-
-
-
 
         return $data;
-
     }
 
-
-
-    public function logout(Request $request){
-
-
-
+    public function logout(Request $request)
+    {
         $user_id = Auth::user()->user_id;
-
-        $user = VendorUsers::where('user_id',$user_id)->first();
-
-
+        $user = VendorUsers::where('user_id', $user_id)->first();
 
         try {
-
             Auth::logout();
-
         } catch (\Exception $e) {
-
-              $this->sendError($e->getMessage(), 401);
-
+            $this->sendError($e->getMessage(), 401);
         }
 
-        
-
-        $data1 = array();
-
-        if(!Auth::check()){
-
-          $data1['logoutuser'] = true;
-
+        $data1 = [];
+        if (!Auth::check()) {
+            $data1['logoutuser'] = true;
         }
 
         return $data1;
-
     }
-
-
-
-
-
 }
-

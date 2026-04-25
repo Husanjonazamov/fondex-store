@@ -251,6 +251,28 @@
 
             var loginPhoneNumber = '';
 
+            function normalizePhone(phone) {
+                return (phone || '').toString().replace(/\s+/g, '').trim();
+            }
+
+            function pickVendorUserFromSnapshots(snapshots, phone) {
+                var matchedUser = null;
+                var normalizedPhone = normalizePhone(phone);
+
+                snapshots.docs.forEach(function(doc) {
+                    var data = doc.data() || {};
+                    var dataPhone = normalizePhone(data.phoneNumber);
+                    var isVendor = data.role === 'vendor';
+                    var isActive = data.active === true || data.isActive === true;
+
+                    if (!matchedUser && isVendor && dataPhone === normalizedPhone && isActive) {
+                        matchedUser = data;
+                    }
+                });
+
+                return matchedUser;
+            }
+
             function sendOTP() {
                 var phone = jQuery("#phone").val();
                 var countryCode = jQuery("#country_selector").val();
@@ -267,10 +289,10 @@
                 // Avval Firestore da foydalanuvchi borligini tekshiramiz
                 database.collection("users")
                     .where("phoneNumber", "==", loginPhoneNumber)
-                    .where("role", "==", 'vendor')
-                    .where("active", "==", true)
                     .get().then(function(snapshots) {
-                        if (!snapshots.docs.length) {
+                        var userData = pickVendorUserFromSnapshots(snapshots, loginPhoneNumber);
+
+                        if (!userData) {
                             jQuery("#password_required_new").html("Foydalanuvchi topilmadi yoki faol emas.");
                             jQuery("#sendotp_btn").prop('disabled', false).text('Send OTP');
                             return;
@@ -319,13 +341,15 @@
                         database.collection("users")
                             .where('phoneNumber', '==', loginPhoneNumber)
                             .get().then(async function(snapshots_login) {
-                                var userData = snapshots_login.docs[0].data();
-                                if (userData && userData.role == "vendor" && userData.active == true) {
+                                var userData = pickVendorUserFromSnapshots(snapshots_login, loginPhoneNumber);
+                                if (userData) {
                                     if (userData.hasOwnProperty('sectionId') && userData.sectionId != null && userData.sectionId != '') {
                                         await database.collection('sections').where('id', '==', userData.sectionId).get().then(async function(snaps) {
-                                            var section_data = snaps.docs[0].data();
-                                            if (section_data.adminCommision && section_data.adminCommision.enable) {
-                                                commissionModel = true;
+                                            if (snaps.docs.length > 0) {
+                                                var section_data = snaps.docs[0].data();
+                                                if (section_data.adminCommision && section_data.adminCommision.enable) {
+                                                    commissionModel = true;
+                                                }
                                             }
                                         });
                                     }
