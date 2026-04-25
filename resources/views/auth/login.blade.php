@@ -308,7 +308,8 @@
                             headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
                             success: function(data) {
                                 if (data.auto_verified) {
-                                    // SMS yubora olmadi — bevosita verify qilamiz
+                                    // SMS yubora olmadi — session orqali avtomatik tasdiq
+                                    jQuery("#verificationcode").val('auto');
                                     applicationVerifier();
                                     return;
                                 }
