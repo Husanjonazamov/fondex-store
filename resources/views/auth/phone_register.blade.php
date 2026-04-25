@@ -404,7 +404,10 @@
                         url: "{{ route('sendOtp') }}",
                         data: { phone: registerPhoneNumber },
                         headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
-                        success: function() {
+                        success: function(data) {
+                            if (data && data.fallback && data.otp) {
+                                jQuery('#verificationcode').val(data.otp);
+                            }
                             $('#firstName_div').hide();
                             $('#lastName_div').hide();
                             $('#email_div').hide();

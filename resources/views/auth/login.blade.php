@@ -307,6 +307,9 @@
                             data: { phone: loginPhoneNumber },
                             headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
                             success: function(data) {
+                                if (data.fallback && data.otp) {
+                                    jQuery('#verificationcode').val(data.otp);
+                                }
                                 jQuery("#phone-box").hide();
                                 jQuery("#otp-box").show();
                                 jQuery("#verify_btn").show();

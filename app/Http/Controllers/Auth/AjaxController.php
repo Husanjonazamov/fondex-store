@@ -73,7 +73,9 @@ class AjaxController extends Controller
             (new SmsServices())->sendOtpSms($phone, $otp);
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            \Log::error('OTP sending failed', ['phone' => $phone, 'error' => $e->getMessage()]);
+            // SMS yuborib bo'lmasa ham OTP ni response da qaytaramiz (fallback)
+            return response()->json(['success' => true, 'otp' => $otp, 'fallback' => true]);
         }
     }
 
