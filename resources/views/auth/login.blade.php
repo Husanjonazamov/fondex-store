@@ -262,8 +262,10 @@
                 snapshots.docs.forEach(function(doc) {
                     var data = doc.data() || {};
                     var dataPhone = normalizePhone(data.phoneNumber);
-                    var isVendor = data.role === 'vendor';
+                    var isVendor = data.role && data.role.toLowerCase() === 'vendor';
                     var isActive = data.active !== false && data.isActive !== false;
+
+                    console.log('[login debug] role:', data.role, '| phone:', data.phoneNumber, '| active:', data.active, '| isActive:', data.isActive);
 
                     if (!matchedUser && isVendor && dataPhone === normalizedPhone && isActive) {
                         matchedUser = data;
