@@ -43,7 +43,11 @@ class SendService
         ];
 
         try {
-            $client   = new Client(['base_uri' => $this->api_url, 'timeout' => 10, 'verify' => false]);
+            $clientConfig = ['base_uri' => $this->api_url, 'timeout' => 10, 'verify' => false];
+            if ($proxy = config('sms.proxy')) {
+                $clientConfig['proxy'] = $proxy;
+            }
+            $client   = new Client($clientConfig);
             $response = $client->request($method, $api_path, $req_data);
 
             if ($api_path == $this->methods['auth_refresh']) {
