@@ -461,25 +461,6 @@
                                 'isDocumentVerify': false,
                             });
 
-                            // Email xabarnoma yuborish
-                            if (emailTemplatesData) {
-                                var formattedDate = new Date();
-                                var month = formattedDate.getMonth() + 1;
-                                var day   = formattedDate.getDate();
-                                var year  = formattedDate.getFullYear();
-                                month = month < 10 ? '0' + month : month;
-                                day   = day < 10 ? '0' + day : day;
-                                formattedDate = day + '-' + month + '-' + year;
-
-                                var message = emailTemplatesData.message;
-                                message = message.replace(/{userid}/g, uuid);
-                                message = message.replace(/{username}/g, firstName + ' ' + lastName);
-                                message = message.replace(/{useremail}/g, email);
-                                message = message.replace(/{userphone}/g, registerPhoneNumber);
-                                message = message.replace(/{date}/g, formattedDate);
-
-                                await sendEmail("{{ url('send-email') }}", emailTemplatesData.subject, message, [adminEmail]);
-                            }
 
                             if (vendor_active == false) {
                                 $(".alert-success").show().html("<p>{{ trans('lang.signup_waiting_approval') }}</p>");

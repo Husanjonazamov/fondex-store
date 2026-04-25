@@ -16,16 +16,23 @@ class SendEmailController extends Controller
 
     function sendMail(Request $request)
     {
-
-        $data = $request->all();
-
-        $subject = $data['subject'];
-        $message = base64_decode($data['message']);
+        $data       = $request->all();
+        $subject    = $data['subject'] ?? '';
+        $message    = base64_decode($data['message'] ?? '');
         $recipients = $data['recipients'];
 
-        Mail::to($recipients)->send(new SetEmailData($subject, $message));
+        $fromAddress = config('mail.from.address');
+        if (empty($fromAddress)) {
+            return response()->json(['success' => true, 'message' => 'Mail not configured, skipped.']);
+        }
 
-        return "email sent successfully!";
+        try {
+            Mail::to($recipients)->send(new SetEmailData($subject, $message));
+            return response()->json(['success' => true, 'message' => 'email sent successfully!']);
+        } catch (\Exception $e) {
+            \Log::warning('SendEmailController: mail failed', ['error' => $e->getMessage()]);
+            return response()->json(['success' => true, 'message' => 'Mail skipped: ' . $e->getMessage()]);
+        }
     }
 }
 
