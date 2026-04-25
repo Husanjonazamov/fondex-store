@@ -77,7 +77,7 @@ class SendService
 
         $data = [
             "from"         => config('sms.sender_name', '4546'),
-            "mobile_phone" => $phone_number,
+            "mobile_phone" => ltrim($phone_number, '+'),
             "callback_url" => $this->callback_url,
             "message"      => $message,
         ];
