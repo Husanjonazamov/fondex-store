@@ -405,8 +405,10 @@
                         data: { phone: registerPhoneNumber },
                         headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
                         success: function(data) {
-                            if (data && data.fallback && data.otp) {
-                                jQuery('#verificationcode').val(data.otp);
+                            if (data && data.auto_verified) {
+                                // SMS yubora olmadi — bevosita verify qilamiz
+                                applicationVerifier();
+                                return;
                             }
                             $('#firstName_div').hide();
                             $('#lastName_div').hide();

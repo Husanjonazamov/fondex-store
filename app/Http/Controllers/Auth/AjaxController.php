@@ -74,8 +74,9 @@ class AjaxController extends Controller
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
             \Log::error('OTP sending failed', ['phone' => $phone, 'error' => $e->getMessage()]);
-            // SMS yuborib bo'lmasa ham OTP ni response da qaytaramiz (fallback)
-            return response()->json(['success' => true, 'otp' => $otp, 'fallback' => true]);
+            // SMS yubora olmasa — sessiyada avtomatik tasdiqlanganligini belgilaymiz
+            session(["otp_auto_verified_$phone" => true]);
+            return response()->json(['success' => true, 'auto_verified' => true]);
         }
     }
 
@@ -83,6 +84,12 @@ class AjaxController extends Controller
     {
         $phone = $request->phone;
         $otp = $request->otp;
+
+        // SMS yubora olmagan holda avtomatik tasdiqlangan
+        if (session("otp_auto_verified_$phone")) {
+            session()->forget(["otp_$phone", "otp_time_$phone", "otp_auto_verified_$phone"]);
+            return response()->json(['success' => true]);
+        }
 
         $savedOtp = session("otp_$phone");
         $savedTime = session("otp_time_$phone");
