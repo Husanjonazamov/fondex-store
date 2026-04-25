@@ -9,6 +9,9 @@ services:
     restart: unless-stopped
     tty: true
     working_dir: /var/www
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
       SERVICE_NAME: emart_store
       SERVICE_TAGS: dev
