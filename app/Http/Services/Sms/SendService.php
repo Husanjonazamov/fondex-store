@@ -30,7 +30,8 @@ class SendService
         $this->methods = [
             "auth_login"     => "auth/login",
             "auth_refresh"   => "auth/refresh",
-            "send_message"   => "message/sms/send"
+            "send_message"   => "message/sms/send",
+            "send_global"    => "message/sms/send-global",
         ];
     }
 
@@ -43,7 +44,7 @@ class SendService
         ];
 
         try {
-            $client   = new Client(['base_uri' => $this->api_url]);
+            $client   = new Client(['base_uri' => $this->api_url, 'timeout' => 10, 'verify' => false]);
             $response = $client->request($method, $api_path, $req_data);
 
             if ($api_path == $this->methods['auth_refresh']) {
@@ -75,18 +76,39 @@ class SendService
         $token = $this->auth()['data']['token'];
         $this->headers["Authorization"] = "Bearer " . $token;
 
-        $data = [
-            "from"         => 4546,
+        // Try global (no moderation required) first, fall back to standard send
+        $globalData = [
             "mobile_phone" => $phone_number,
+            "message"      => $message,
             "callback_url" => $this->callback_url,
-            "message"      => $message
         ];
 
-        return $this->request(
-            $this->methods["send_message"],
-            $data,
+        $result = $this->request(
+            $this->methods["send_global"],
+            $globalData,
             self::POST,
             $this->headers
         );
+
+        if (isset($result['status']) && $result['status'] === 'error') {
+            $data = [
+                "from"         => config('sms.sender_name', '4546'),
+                "mobile_phone" => $phone_number,
+                "callback_url" => $this->callback_url,
+                "message"      => $message,
+            ];
+            $result = $this->request(
+                $this->methods["send_message"],
+                $data,
+                self::POST,
+                $this->headers
+            );
+        }
+
+        if (isset($result['status']) && $result['status'] === 'error') {
+            throw new Exception($result['message'] ?? 'SMS yuborishda xatolik');
+        }
+
+        return $result;
     }
 }

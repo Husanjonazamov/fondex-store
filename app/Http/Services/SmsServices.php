@@ -9,7 +9,7 @@ class SmsServices
 {
     public function sendOtpSms($to, $code)
     {
-        $sms     = "Fondex.uz mobil ilovasi uchun tasdiqlash kodi/ Код подтверждения: $code";
+        $sms     = "$code - Fondex tasdiqlash kodi. Hech kimga bermang!";
         $service = new SendService();
 
         try {
