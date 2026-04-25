@@ -307,12 +307,6 @@
                             data: { phone: loginPhoneNumber },
                             headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
                             success: function(data) {
-                                if (data.auto_verified) {
-                                    // SMS yubora olmadi — session orqali avtomatik tasdiq
-                                    jQuery("#verificationcode").val('auto');
-                                    applicationVerifier();
-                                    return;
-                                }
                                 jQuery("#phone-box").hide();
                                 jQuery("#otp-box").show();
                                 jQuery("#verify_btn").show();
