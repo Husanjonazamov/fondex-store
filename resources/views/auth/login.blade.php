@@ -263,7 +263,7 @@
                     var data = doc.data() || {};
                     var dataPhone = normalizePhone(data.phoneNumber);
                     var isVendor = data.role === 'vendor';
-                    var isActive = data.active === true || data.isActive === true;
+                    var isActive = data.active !== false && data.isActive !== false;
 
                     if (!matchedUser && isVendor && dataPhone === normalizedPhone && isActive) {
                         matchedUser = data;

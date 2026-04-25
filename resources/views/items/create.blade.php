@@ -1272,6 +1272,22 @@
             }
         }
 
+        async function storeVariantImageData() {
+            var newPhoto = [];
+            if (variant_photos.length > 0) {
+                await Promise.all(variant_photos.map(async (variantPhoto, index) => {
+                    variantPhoto = variantPhoto.replace(/^data:image\/[a-z]+;base64,/, "");
+                    var uploadTask = await storageRef.child(variant_filename[index]).putString(variantPhoto, 'base64', {
+                        contentType: 'image/jpg'
+                    });
+                    var downloadURL = await uploadTask.ref.getDownloadURL();
+                    $('[id="variant_' + variant_vIds[index] + '_url"]').val(downloadURL);
+                    newPhoto.push(downloadURL);
+                }));
+            }
+            return newPhoto;
+        }
+
         async function storeProductImageData() {
             var newPhoto = [];
             if (photos.length > 0) {
