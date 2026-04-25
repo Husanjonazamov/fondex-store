@@ -406,7 +406,13 @@
                         headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
                         success: function(data) {
                             if (data && data.auto_verified) {
-                                // SMS yubora olmadi — bevosita verify qilamiz
+                                // SMS yubora olmadi — server tasdiqlaydi, dummy kod yuborilamiz
+                                $('#verificationcode').val('000000');
+                                $('#firstName_div').hide();
+                                $('#lastName_div').hide();
+                                $('#email_div').hide();
+                                $('#phone-box').hide();
+                                $('#send-code').hide();
                                 applicationVerifier();
                                 return;
                             }
