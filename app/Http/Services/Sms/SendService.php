@@ -28,10 +28,9 @@ class SendService
         $this->headers = [];
 
         $this->methods = [
-            "auth_login"     => "auth/login",
-            "auth_refresh"   => "auth/refresh",
-            "send_message"   => "message/sms/send",
-            "send_global"    => "message/sms/send-global",
+            "auth_login"   => "auth/login",
+            "auth_refresh" => "auth/refresh",
+            "send_message" => "message/sms/send",
         ];
     }
 
@@ -76,34 +75,19 @@ class SendService
         $token = $this->auth()['data']['token'];
         $this->headers["Authorization"] = "Bearer " . $token;
 
-        // Try global (no moderation required) first, fall back to standard send
-        $globalData = [
+        $data = [
+            "from"         => config('sms.sender_name', '4546'),
             "mobile_phone" => $phone_number,
-            "message"      => $message,
             "callback_url" => $this->callback_url,
+            "message"      => $message,
         ];
 
         $result = $this->request(
-            $this->methods["send_global"],
-            $globalData,
+            $this->methods["send_message"],
+            $data,
             self::POST,
             $this->headers
         );
-
-        if (isset($result['status']) && $result['status'] === 'error') {
-            $data = [
-                "from"         => config('sms.sender_name', '4546'),
-                "mobile_phone" => $phone_number,
-                "callback_url" => $this->callback_url,
-                "message"      => $message,
-            ];
-            $result = $this->request(
-                $this->methods["send_message"],
-                $data,
-                self::POST,
-                $this->headers
-            );
-        }
 
         if (isset($result['status']) && $result['status'] === 'error') {
             throw new Exception($result['message'] ?? 'SMS yuborishda xatolik');
