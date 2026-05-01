@@ -853,6 +853,16 @@
                                         fd.append('section_id', section_id);
                                         fd.append('id', id);
                                         fd.append('vendorID', vandorId);
+                                        fd.append('calories', itemCalories || 0);
+                                        fd.append('grams', itemGrams || 0);
+                                        fd.append('proteins', itemProteins || 0);
+                                        fd.append('fats', itemFats || 0);
+                                        fd.append('nonveg', nonveg ? 'true' : 'false');
+                                        fd.append('veg', veg ? 'true' : 'false');
+                                        fd.append('takeawayOption', itemTakeaway ? 'true' : 'false');
+                                        fd.append('addOnsTitle', JSON.stringify(addOnesTitle));
+                                        fd.append('addOnsPrice', JSON.stringify(addOnesPrice));
+                                        fd.append('product_specification', JSON.stringify(product_specification));
                                         if (attributes.length > 0) fd.append('attributes', JSON.stringify(attributes));
                                         if (variants.length > 0) fd.append('variants', JSON.stringify(variants));
                                         if (item_attribute) fd.append('item_attribute', JSON.stringify(item_attribute));
