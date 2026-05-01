@@ -174,8 +174,11 @@
                             </div>
                             <div class="order_addre-edit mt-4 driver_details_hide">
                                 <div class="card">
-                                    <div class="card-header bg-white">
+                                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
                                         <h3>{{ trans('lang.driver_detail') }}</h3>
+                                        <button type="button" id="reassign-driver-btn" class="btn btn-warning btn-sm d-none">
+                                            <i class="mdi mdi-refresh mr-1"></i>Qayta tayinlash
+                                        </button>
                                     </div>
                                     <div class="card-body">
                                         <div class="address order_detail-top-box">
@@ -894,6 +897,9 @@
                     if (order.status == "Order Accepted" || order.status == "Driver Pending") {
                         $("#order_status").prop("disabled", true);
                     }
+                    if (order.status == "Driver Pending") {
+                        $('#reassign-driver-btn').removeClass('d-none');
+                    }
                 }
                 var price = 0;
                 if (order.vendorID) {
@@ -1090,6 +1096,22 @@
                 var randomVal = $(freeOptions[randomIndex]).val();
                 $('#deliveryman_list').val(randomVal).trigger('change');
                 $('#select_deliveryman').html('');
+            });
+
+            $('#reassign-driver-btn').click(async function() {
+                if (!confirm('Hozirgi kuryerni olib tashlab, yangi kuryer tayinlash uchun davom etasizmi?')) return;
+                // Eski kuryerning orderRequestData'sidan bu orderni olib tashlash
+                if (driverId) {
+                    await database.collection('users').where('id', '==', driverId).get().then(async function(snap) {
+                        if (!snap.empty) {
+                            var driverDoc = snap.docs[0];
+                            var existingRequests = driverDoc.data().orderRequestData || [];
+                            existingRequests = existingRequests.filter(function(oid) { return oid !== id; });
+                            await database.collection('users').doc(driverDoc.id).update({ 'orderRequestData': existingRequests });
+                        }
+                    });
+                }
+                $('#assignDriverModal').modal('show');
             });
 
             $('#order-assign-btn').click(function() {

@@ -39,9 +39,9 @@ class IntegrationController extends Controller
                 ['name' => 'vendor_id',     'contents' => $vendorUser->uuid],
                 ['name' => 'firestore_id',  'contents' => $request->id ?? ''],
                 ['name' => 'name',          'contents' => $request->name ?? ''],
-                ['name' => 'price',         'contents' => (string)($request->price ?? 0)],
-                ['name' => 'discount_price','contents' => (string)($request->disPrice ?? 0)],
-                ['name' => 'quantity',      'contents' => (string)($request->quantity ?? -1)],
+                ['name' => 'price',         'contents' => (string)((float)($request->price ?? 0))],
+                ['name' => 'discount_price','contents' => (string)((float)($request->disPrice ?? 0))],
+                ['name' => 'quantity',      'contents' => (string)((int)($request->quantity ?? -1))],
                 ['name' => 'description',   'contents' => $request->description ?? ''],
                 ['name' => 'category',      'contents' => $request->categoryID ?? ''],
                 ['name' => 'section',       'contents' => $request->section_id ?? ''],
@@ -87,24 +87,8 @@ class IntegrationController extends Controller
 
             $client = new \GuzzleHttp\Client(['verify' => false]);
 
-            // If backend_id provided use PATCH (update), otherwise POST (create)
+            // backend_id explicitly provided → PATCH (update), otherwise POST (create)
             $backendId = $request->backend_id ?? null;
-
-            // If no backend_id, try to find existing product by firestore_id
-            if (empty($backendId) && !empty($request->id)) {
-                try {
-                    $lookup = $client->get($this->apiUrl . '/products/', [
-                        'query' => ['firestore_id' => $request->id, 'vendor' => $vendorFirestoreId],
-                    ]);
-                    $lookupData = json_decode($lookup->getBody()->getContents(), true);
-                    $existing = $lookupData['data']['results'] ?? $lookupData['results'] ?? [];
-                    if (!empty($existing)) {
-                        $backendId = $existing[0]['id'] ?? null;
-                    }
-                } catch (\Exception $e) {
-                    \Log::warning('syncProduct lookup failed', ['error' => $e->getMessage()]);
-                }
-            }
 
             if (!empty($backendId)) {
                 $guzzleResponse = $client->patch($this->apiUrl . '/products/' . $backendId . '/', [
@@ -120,7 +104,12 @@ class IntegrationController extends Controller
             \Log::info('syncProduct backend response', ['status' => $guzzleResponse->getStatusCode(), 'body' => $rawBody]);
             $body = json_decode($rawBody, true);
 
-            return response()->json(['success' => true, 'data' => $body]);
+            $imageUrl = $body['image'] ?? $body['data']['image'] ?? null;
+            if ($imageUrl) {
+                $imageUrl = str_replace('http://', 'https://', $imageUrl);
+            }
+
+            return response()->json(['success' => true, 'data' => array_merge($body ?? [], ['image' => $imageUrl])]);
 
         } catch (\GuzzleHttp\Exception\ClientException $e) {
             $body = $e->getResponse()->getBody()->getContents();
@@ -212,21 +201,27 @@ class IntegrationController extends Controller
             \Log::info('getProducts done', ['count' => count($rawList), 'next_cursor' => $nextCursor]);
 
             $normalized = array_map(function ($item) {
+                $itemAttribute = $item['item_attribute'] ?? null;
+                if (is_string($itemAttribute) && $itemAttribute !== '') {
+                    $decoded = json_decode($itemAttribute, true);
+                    $itemAttribute = (json_last_error() === JSON_ERROR_NONE) ? $decoded : null;
+                }
                 return [
-                    'id'          => ($item['firestore_id'] ?: null) ?? ($item['id'] ?? ''),
-                    'backend_id'  => $item['id'] ?? null,
-                    'name'        => $item['name'] ?? '',
-                    'price'       => $item['price'] ?? 0,
-                    'disPrice'    => $item['discount_price'] ?? '0',
-                    'photo'       => !empty($item['image']) ? str_replace('http://', 'https://', $item['image']) : '',
-                    'photos'      => $item['images'] ?? [],
-                    'vendorID'    => $item['vendor'] ?? '',
-                    'categoryID'  => $item['category'] ?? '',
-                    'section_id'  => $item['section'] ?? '',
-                    'description' => $item['description'] ?? '',
-                    'publish'     => ($item['is_publish'] ?? false) ? 'Yes' : 'No',
-                    'quantity'    => $item['quantity'] ?? 0,
-                    'createdAt'   => $item['created_at'] ?? null,
+                    'id'             => ($item['firestore_id'] ?: null) ?? ($item['id'] ?? ''),
+                    'backend_id'     => $item['id'] ?? null,
+                    'name'           => $item['name'] ?? '',
+                    'price'          => (float)($item['price'] ?? 0),
+                    'disPrice'       => (float)($item['discount_price'] ?? 0),
+                    'photo'          => !empty($item['image']) ? str_replace('http://', 'https://', $item['image']) : '',
+                    'photos'         => $item['images'] ?? [],
+                    'vendorID'       => $item['vendor'] ?? '',
+                    'categoryID'     => $item['category'] ?? '',
+                    'section_id'     => $item['section'] ?? '',
+                    'description'    => $item['description'] ?? '',
+                    'publish'        => ($item['is_publish'] ?? false) ? 'Yes' : 'No',
+                    'quantity'       => (int)($item['quantity'] ?? 0),
+                    'item_attribute' => $itemAttribute,
+                    'createdAt'      => $item['created_at'] ?? null,
                 ];
             }, $rawList);
 

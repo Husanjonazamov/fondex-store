@@ -812,10 +812,10 @@
                                 database.collection('vendor_products')
                                     .doc(id).set({
                                         'name': name,
-                                        'price': price,
+                                        'price': parseFloat(price) || 0,
                                         'quantity': parseInt(
                                             item_quantity),
-                                        'disPrice': discount,
+                                        'disPrice': parseFloat(discount) || 0,
                                         'vendorID': vandorId,
                                         'categoryID': category,
                                         'brandID': brand,
@@ -853,15 +853,11 @@
                                         fd.append('section_id', section_id);
                                         fd.append('id', id);
                                         fd.append('vendorID', vandorId);
-                                        fd.append('attributes', JSON.stringify(attributes));
-                                        fd.append('variants', JSON.stringify(variants));
-                                        fd.append('item_attribute', JSON.stringify(item_attribute || {}));
-                                        console.log('[syncProduct] productImageFile:', productImageFile);
+                                        if (attributes.length > 0) fd.append('attributes', JSON.stringify(attributes));
+                                        if (variants.length > 0) fd.append('variants', JSON.stringify(variants));
+                                        if (item_attribute) fd.append('item_attribute', JSON.stringify(item_attribute));
                                         if (productImageFile) {
                                             fd.append('image', productImageFile, productImageFile.name);
-                                            console.log('[syncProduct] image appended:', productImageFile.name, productImageFile.size);
-                                        } else {
-                                            console.warn('[syncProduct] productImageFile is NULL - no image will be sent');
                                         }
                                         $.ajax({
                                             url: '{{ route('items.sync') }}',
@@ -874,7 +870,18 @@
                                             contentType: false,
                                             success: function(response) {
                                                 if (response.success) {
-                                                    window.location.href = '{{ route('items') }}';
+                                                    var backendData = response.data || {};
+                                                    var backendPhoto = backendData.image || backendData.photo || '';
+                                                    if (backendPhoto) {
+                                                        database.collection('vendor_products').doc(id).update({
+                                                            'photo': backendPhoto,
+                                                            'photos': [backendPhoto]
+                                                        }).finally(function() {
+                                                            window.location.href = '{{ route('items') }}';
+                                                        });
+                                                    } else {
+                                                        window.location.href = '{{ route('items') }}';
+                                                    }
                                                 } else {
                                                     jQuery("#data-table_processing").hide();
                                                     $(".error_top").show().html("<p>" + response.message + "</p>");

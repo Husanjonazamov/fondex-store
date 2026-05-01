@@ -926,9 +926,9 @@
                             }
                             database.collection('vendor_products').doc(productId).set({
                                 'name': name,
-                                'price': price,
+                                'price': parseFloat(price) || 0,
                                 'quantity': parseInt(item_quantity),
-                                'disPrice': discount,
+                                'disPrice': parseFloat(discount) || 0,
                                 'categoryID': category,
                                 'brandID': brand,
                                 'photo': photo,
@@ -965,9 +965,9 @@
                                 fd.append('id', productId);
                                 fd.append('vendorID', vendorID);
                                 fd.append('backend_id', backendId);
-                                fd.append('attributes', JSON.stringify(attributes));
-                                fd.append('variants', JSON.stringify(variants));
-                                fd.append('item_attribute', JSON.stringify(item_attribute || {}));
+                                if (attributes.length > 0) fd.append('attributes', JSON.stringify(attributes));
+                                if (variants.length > 0) fd.append('variants', JSON.stringify(variants));
+                                if (item_attribute) fd.append('item_attribute', JSON.stringify(item_attribute));
                                 if (productImageFile) {
                                     fd.append('image', productImageFile, productImageFile.name);
                                 }
@@ -982,7 +982,18 @@
                                     contentType: false,
                                     success: function(response) {
                                         if (response.success) {
-                                            window.location.href = '{{ route('items') }}';
+                                            var backendData = response.data || {};
+                                            var backendPhoto = backendData.image || backendData.photo || '';
+                                            if (backendPhoto) {
+                                                database.collection('vendor_products').doc(productId).update({
+                                                    'photo': backendPhoto,
+                                                    'photos': [backendPhoto]
+                                                }).finally(function() {
+                                                    window.location.href = '{{ route('items') }}';
+                                                });
+                                            } else {
+                                                window.location.href = '{{ route('items') }}';
+                                            }
                                         } else {
                                             jQuery("#data-table_processing").hide();
                                             $(".error_top").show().html("<p>" + response.message + "</p>");
