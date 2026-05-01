@@ -250,9 +250,34 @@
             var commissionModel = false;
 
             var loginPhoneNumber = '';
+            var loginLookupPhone = '';
+            var loginEmail = '';
 
             function normalizePhone(phone) {
                 return (phone || '').toString().replace(/\s+/g, '').trim();
+            }
+
+            function normalizePhoneDigits(phone) {
+                return (phone || '').toString().replace(/\D/g, '');
+            }
+
+            function getLookupPhone(phone, countryCode) {
+                var phoneDigits = normalizePhoneDigits(phone);
+                var countryDigits = normalizePhoneDigits(countryCode);
+
+                if (countryDigits && phoneDigits.indexOf(countryDigits) === 0) {
+                    return phoneDigits.substring(countryDigits.length);
+                }
+
+                return phoneDigits;
+            }
+
+            function buildPhoneEmailCandidates(phone) {
+                var phoneName = normalizePhoneDigits(phone);
+                return [
+                    phoneName + '@gmail.com',
+                    phoneName + '@fondex.com'
+                ];
             }
 
             function pickVendorUserFromSnapshots(snapshots, phone) {
@@ -275,6 +300,185 @@
                 return matchedUser;
             }
 
+            function pickVendorUserByEmailFromSnapshots(snapshots) {
+                var matchedUser = null;
+
+                snapshots.docs.forEach(function(doc) {
+                    var data = doc.data() || {};
+
+                    if (!matchedUser) {
+                        matchedUser = data;
+                    }
+                });
+
+                return matchedUser;
+            }
+
+            function pickVendorUserByEmailPrefixFromSnapshots(snapshots, emailPrefix) {
+                var matchedUser = null;
+
+                snapshots.docs.forEach(function(doc) {
+                    var data = doc.data() || {};
+                    var email = (data.email || '').toString().toLowerCase();
+
+                    if (!matchedUser && email.indexOf(emailPrefix) === 0) {
+                        matchedUser = data;
+                    }
+                });
+
+                return matchedUser;
+            }
+
+            function isActiveRecord(data) {
+                return data && data.active !== false && data.isActive !== false;
+            }
+
+            async function getUserById(userId) {
+                if (!userId) {
+                    return null;
+                }
+
+                var userSnapshots = await database.collection("users")
+                    .where("id", "==", userId)
+                    .get();
+
+                if (userSnapshots.docs.length > 0) {
+                    return userSnapshots.docs[0].data();
+                }
+
+                var userDoc = await database.collection("users").doc(userId).get();
+                return userDoc.exists ? userDoc.data() : null;
+            }
+
+            function buildUserDataFromVendor(vendorData, email) {
+                return {
+                    id: vendorData.author || vendorData.id,
+                    firstName: vendorData.authorName || vendorData.title || '',
+                    lastName: '',
+                    email: email,
+                    phoneNumber: loginLookupPhone,
+                    role: 'vendor',
+                    active: true,
+                    isActive: true,
+                    vendorID: vendorData.id || '',
+                    sectionId: vendorData.sectionId || '',
+                    subscriptionPlanId: vendorData.subscriptionPlanId || ''
+                };
+            }
+
+            async function findVendorUserByVendorEmail(email) {
+                var vendorSnapshots = await database.collection("vendors")
+                    .where("email", "==", email)
+                    .get();
+
+                if (vendorSnapshots.docs.length === 0) {
+                    return null;
+                }
+
+                for (var i = 0; i < vendorSnapshots.docs.length; i++) {
+                    var vendorData = vendorSnapshots.docs[i].data() || {};
+
+                    var userData = await getUserById(vendorData.author);
+
+                    if (userData) {
+                        userData.vendorID = userData.vendorID || vendorData.id || '';
+                        loginEmail = email;
+                        return userData;
+                    }
+
+                    loginEmail = email;
+                    return buildUserDataFromVendor(vendorData, email);
+                }
+
+                return null;
+            }
+
+            async function findVendorUserByAnyEmailDomain(phone) {
+                var emailPrefix = normalizePhoneDigits(phone) + '@';
+                var emailEnd = emailPrefix + '\uf8ff';
+
+                var userSnapshots = await database.collection("users")
+                    .orderBy("email")
+                    .startAt(emailPrefix)
+                    .endAt(emailEnd)
+                    .get();
+                var userData = pickVendorUserByEmailPrefixFromSnapshots(userSnapshots, emailPrefix);
+
+                if (userData) {
+                    loginEmail = userData.email || '';
+                    return userData;
+                }
+
+                var vendorSnapshots = await database.collection("vendors")
+                    .orderBy("email")
+                    .startAt(emailPrefix)
+                    .endAt(emailEnd)
+                    .get();
+
+                for (var i = 0; i < vendorSnapshots.docs.length; i++) {
+                    var vendorData = vendorSnapshots.docs[i].data() || {};
+                    var vendorEmail = (vendorData.email || '').toString().toLowerCase();
+
+                    if (vendorEmail.indexOf(emailPrefix) !== 0) {
+                        continue;
+                    }
+
+                    userData = await getUserById(vendorData.author);
+
+                    if (userData) {
+                        userData.vendorID = userData.vendorID || vendorData.id || '';
+                        loginEmail = vendorData.email || vendorEmail;
+                        return userData;
+                    }
+
+                    loginEmail = vendorData.email || vendorEmail;
+                    return buildUserDataFromVendor(vendorData, loginEmail);
+                }
+
+                return null;
+            }
+
+            async function findVendorUserForLogin(phone) {
+                var phoneSnapshots = await database.collection("users")
+                    .where("phoneNumber", "==", phone)
+                    .get();
+                var userData = pickVendorUserFromSnapshots(phoneSnapshots, phone);
+
+                if (userData) {
+                    loginEmail = userData.email || buildPhoneEmailCandidates(phone)[0];
+                    return userData;
+                }
+
+                var emailCandidates = buildPhoneEmailCandidates(phone);
+
+                for (var i = 0; i < emailCandidates.length; i++) {
+                    var emailSnapshots = await database.collection("users")
+                        .where("email", "==", emailCandidates[i])
+                        .get();
+                    userData = pickVendorUserByEmailFromSnapshots(emailSnapshots);
+
+                    if (userData) {
+                        loginEmail = userData.email || emailCandidates[i];
+                        return userData;
+                    }
+
+                    userData = await findVendorUserByVendorEmail(emailCandidates[i]);
+
+                    if (userData) {
+                        return userData;
+                    }
+                }
+
+                userData = await findVendorUserByAnyEmailDomain(phone);
+
+                if (userData) {
+                    return userData;
+                }
+
+                loginEmail = '';
+                return null;
+            }
+
             function sendOTP() {
                 var phone = jQuery("#phone").val();
                 var countryCode = jQuery("#country_selector").val();
@@ -285,15 +489,11 @@
                 }
 
                 loginPhoneNumber = '+' + countryCode + phone;
+                loginLookupPhone = getLookupPhone(phone, countryCode);
                 jQuery("#password_required_new").html("");
                 jQuery("#sendotp_btn").prop('disabled', true).text('Yuborilmoqda...');
 
-                // Avval Firestore da foydalanuvchi borligini tekshiramiz
-                database.collection("users")
-                    .where("phoneNumber", "==", loginPhoneNumber)
-                    .get().then(function(snapshots) {
-                        var userData = pickVendorUserFromSnapshots(snapshots, loginPhoneNumber);
-
+                findVendorUserForLogin(loginLookupPhone).then(function(userData) {
                         if (!userData) {
                             jQuery("#password_required_new").html("Foydalanuvchi topilmadi yoki faol emas.");
                             jQuery("#sendotp_btn").prop('disabled', false).text('Send OTP');
@@ -340,10 +540,7 @@
                     headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
                     success: function(data) {
                         // OTP to'g'ri - Firestore dan user ma'lumotini olamiz
-                        database.collection("users")
-                            .where('phoneNumber', '==', loginPhoneNumber)
-                            .get().then(async function(snapshots_login) {
-                                var userData = pickVendorUserFromSnapshots(snapshots_login, loginPhoneNumber);
+                        findVendorUserForLogin(loginLookupPhone).then(async function(userData) {
                                 if (userData) {
                                     if (userData.hasOwnProperty('sectionId') && userData.sectionId != null && userData.sectionId != '') {
                                         await database.collection('sections').where('id', '==', userData.sectionId).get().then(async function(snaps) {
@@ -367,7 +564,7 @@
                                         data: {
                                             id: userData.id,
                                             userId: userData.id,
-                                            email: loginPhoneNumber,
+                                            email: loginEmail || userData.email || buildPhoneEmailCandidates(loginLookupPhone)[0],
                                             password: '',
                                             firstName: userData.firstName,
                                             lastName: userData.lastName,

@@ -186,12 +186,6 @@
                                     <input type="hidden" id="hidden_lName" />
                                 </div>
 
-                                <div class="form-group" id="email_div">
-                                    <label class="text-dark">{{trans('lang.email')}}</label>                                    
-                                        <input type="email" placeholder="Enter Email" class="form-control user_email" id="email" required>
-                                        <input type="hidden" id="hidden_email" />
-                                </div>
-
                                 <div class="form-group " id="phone-box">
                                     <div class="col-xs-12">
                                         <select name="country" id="country_selector">
@@ -363,10 +357,14 @@
 
             var registerPhoneNumber = '';
 
+            function buildPhoneEmail(phone) {
+                var phoneName = (phone || '').toString().replace(/\D/g, '');
+                return phoneName + '@gmail.com';
+            }
+
             function sendOTP() {
                 var firstName = $('#firstName').val();
                 var lastName  = $('#lastName').val();
-                var email     = $('#email').val();
                 var phone     = jQuery("#phone").val();
                 var country   = jQuery("#country_selector").val();
 
@@ -376,10 +374,6 @@
                     return;
                 } else if (phone == "") {
                     $(".error_top").show().html("<p>{{ trans('lang.enter_owners_phone') }}</p>");
-                    window.scrollTo(0, 0);
-                    return;
-                } else if (email == "") {
-                    $(".error_top").show().html("<p>{{ trans('lang.enter_owners_email') }}</p>");
                     window.scrollTo(0, 0);
                     return;
                 }
@@ -395,7 +389,6 @@
 
                     $('#hidden_fName').val(firstName);
                     $('#hidden_lName').val(lastName);
-                    $('#hidden_email').val(email);
 
                     $('#send-code').prop('disabled', true).text('Yuborilmoqda...');
 
@@ -410,7 +403,6 @@
                                 $('#verificationcode').val('000000');
                                 $('#firstName_div').hide();
                                 $('#lastName_div').hide();
-                                $('#email_div').hide();
                                 $('#phone-box').hide();
                                 $('#send-code').hide();
                                 applicationVerifier();
@@ -418,7 +410,6 @@
                             }
                             $('#firstName_div').hide();
                             $('#lastName_div').hide();
-                            $('#email_div').hide();
                             $('#phone-box').hide();
                             jQuery("#verify_btn").show();
                             jQuery("#otp-box").show();
@@ -451,7 +442,7 @@
                     success: async function() {
                         var firstName = $('#hidden_fName').val();
                         var lastName  = $('#hidden_lName').val();
-                        var email     = $('#hidden_email').val();
+                        var email     = buildPhoneEmail(jQuery("#phone").val());
                         var uuid      = database.collection('users').doc().id;
                         var coordinates = new firebase.firestore.GeoPoint(0, 0);
 

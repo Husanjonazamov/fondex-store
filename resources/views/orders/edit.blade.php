@@ -1016,6 +1016,15 @@
                 }
                 return h;
             }
+
+            function pushUnique(list, value) {
+                list = Array.isArray(list) ? list : [];
+                if (list.indexOf(value) === -1) {
+                    list.push(value);
+                }
+                return list;
+            }
+
             async function autoAssignRandomCourier(vendorID, orderStatus) {
                 try {
                     var snapshot = await database.collection('users')
@@ -1045,17 +1054,14 @@
                     var driverID = driverData.id;
                     fcmTokenDriver = driverData.fcmToken || '';
                     var orderRequestData = (driverData.orderRequestData && driverData.orderRequestData.length) ? driverData.orderRequestData : [];
-                    var inProgressOrderID = (driverData.inProgressOrderID && driverData.inProgressOrderID.length) ? driverData.inProgressOrderID : [];
-                    orderRequestData.push(id);
-                    inProgressOrderID.push(id);
+                    orderRequestData = pushUnique(orderRequestData, id);
 
                     await database.collection('users').doc(driverID).update({
-                        'orderRequestData': orderRequestData,
-                        'inProgressOrderID': inProgressOrderID
+                        'orderRequestData': orderRequestData
                     });
 
                     await database.collection('vendor_orders').doc(id).update({
-                        'status': 'In Transit',
+                        'status': 'Driver Pending',
                         'driverID': driverID,
                         'driver': driverData
                     });
@@ -1064,10 +1070,10 @@
                         kuryer: driverData.firstName + ' ' + driverData.lastName,
                         kuryerID: driverID,
                         orderID: id,
-                        status: 'In Transit',
+                        status: 'Driver Pending',
                         jami_bosh_kuryerlar: freeDrives.length
                     });
-                    callWalletTransaction('In Transit');
+                    callWalletTransaction('Driver Pending');
                 } catch (err) {
                     console.error('autoAssignRandomCourier xato:', err);
                     callWalletTransaction(orderStatus);
@@ -1104,7 +1110,6 @@
                 if (isSelfDeliveryByVendor && isSelfDeliveryGlobally && !orderTakeAwayOption) {
                     var deliveryman = $('#deliveryman_list').val();
                     var orderRequestData = [];
-                    var inProgressOrderID = [];
                     var driverData = '';
                     await database.collection('users').where('id', '==', deliveryman).get().then(async function(snapshot) {
                         if (snapshot.docs.length > 0) {
@@ -1113,19 +1118,14 @@
                             if (driverData.hasOwnProperty('orderRequestData') && driverData.orderRequestData != null && driverData.orderRequestData != '') {
                                 orderRequestData = driverData.orderRequestData;
                             }
-                            if (driverData.hasOwnProperty('inProgressOrderID') && driverData.inProgressOrderID != null && driverData.inProgressOrderID != '') {
-                                inProgressOrderID = driverData.inProgressOrderID
-                            }
                         }
-                        orderRequestData.push(id);
-                        inProgressOrderID.push(id);
+                        orderRequestData = pushUnique(orderRequestData, id);
                     })
                     await database.collection('users').doc(deliveryman).update({
-                        'orderRequestData': orderRequestData,
-                        'inProgressOrderID': inProgressOrderID
+                        'orderRequestData': orderRequestData
                     });
                     var updatedData = {
-                        'status': "In Transit",
+                        'status': "Driver Pending",
                         'estimatedTimeToPrepare': preparationTime,
                         'driverID': deliveryman,
                         'driver': driverData
