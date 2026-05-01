@@ -745,84 +745,103 @@
                         }
                         if ($('#variants').val().length > 0) {
                             var variantsSet = $.parseJSON($('#variants').val());
-                            var isValid = false; // Flag to track validation
-                            await storeVariantImageData().then(async (vIMG) => {
-
-                                $.each(variantsSet, function(key, variant) {
-                                    var variant_id = uniqid();
-                                    var variant_sku = variant;
-                                    var variant_price = $('#price_' +
-                                        variant).val();
-                                    var variant_quantity = $('#qty_' +
-                                        variant).val();
-                                    var variant_image = $('#variant_' +
-                                        variant + '_url').val();
-
-                                    // Validation for variant_price
-                                    if (!variant_price || parseFloat(
-                                            variant_price) <= 0) {
-                                        $(".error_top").show();
-                                        $(".error_top").html("");
-                                        $(".error_top").append(
-                                            "<p>{{ trans('lang.enter_positive_variant_price_error') }}</p>"
-                                        );
-                                        window.scrollTo(0, 0);
-                                        isValid = true;
-                                        return false; // Exit loop
-                                    }
-
-                                    variants.push({
-                                        'variant_id': variant_id,
-                                        'variant_sku': variant_sku,
-                                        'variant_price': variant_price,
-                                        'variant_quantity': variant_quantity,
-                                        'variant_image': variant_image
-                                    });
+                            var isValid = false;
+                            $.each(variantsSet, function(key, variant) {
+                                var variant_price = $('#price_' + variant).val();
+                                if (!variant_price || parseFloat(variant_price) <= 0) {
+                                    $(".error_top").show().html("<p>{{ trans('lang.enter_positive_variant_price_error') }}</p>");
+                                    window.scrollTo(0, 0);
+                                    isValid = true;
+                                    return false;
+                                }
+                                var variantIndex = variant_vIds.indexOf(variant);
+                                // variant rasm storage.fondex.uz ga file sifatida yuboriladi
+                                variants.push({
+                                    'variant_id': uniqid(),
+                                    'variant_sku': variant,
+                                    'variant_price': variant_price,
+                                    'variant_quantity': $('#qty_' + variant).val(),
+                                    'variant_image': ''
                                 });
-
-                            }).catch(err => {
-                                jQuery("#data-table_processing").hide();
-                                $(".error_top").show();
-                                $(".error_top").html("");
-                                $(".error_top").append("<p>" + err + "</p>");
-                                window.scrollTo(0, 0);
                             });
-                            if (isValid) {
-                                return;
-
-                            }
+                            if (isValid) return;
                             $(".error_top").hide().html("");
-
                         }
 
                         var item_attribute = null;
                         if (attributes.length > 0 && variants.length > 0) {
-                            var item_attribute = {
-                                'attributes': attributes,
-                                'variants': variants
-                            };
+                            var item_attribute = { 'attributes': attributes, 'variants': variants };
                         }
                         //end-item attribute
+
                         jQuery("#data-table_processing").show();
-                        await storeDigitalImageData().then(async (DigitalImg) => {
-                            await storeProductImageData().then(async (IMG) => {
-                                if (IMG.length > 0) {
-                                    photo = IMG[0];
-                                }
-                                database.collection('vendor_products')
-                                    .doc(id).set({
+
+                        // Avval API ga yuborish, so'ng Firestore ga saqlash
+                        var fd = new FormData();
+                        fd.append('name', name);
+                        fd.append('price', price);
+                        fd.append('quantity', parseInt(item_quantity));
+                        fd.append('disPrice', discount);
+                        fd.append('categoryID', category);
+                        fd.append('brandID', brand);
+                        fd.append('description', description);
+                        fd.append('publish', itemPublish);
+                        fd.append('section_id', section_id);
+                        fd.append('id', id);
+                        fd.append('vendorID', vandorId);
+                        fd.append('calories', itemCalories || 0);
+                        fd.append('grams', itemGrams || 0);
+                        fd.append('proteins', itemProteins || 0);
+                        fd.append('fats', itemFats || 0);
+                        fd.append('nonveg', nonveg ? 'true' : 'false');
+                        fd.append('veg', veg ? 'true' : 'false');
+                        fd.append('takeawayOption', itemTakeaway ? 'true' : 'false');
+                        fd.append('addOnsTitle', JSON.stringify(addOnesTitle));
+                        fd.append('addOnsPrice', JSON.stringify(addOnesPrice));
+                        fd.append('product_specification', JSON.stringify(product_specification));
+                        if (attributes.length > 0) fd.append('attributes', JSON.stringify(attributes));
+                        if (variants.length > 0) fd.append('variants', JSON.stringify(variants));
+                        if (item_attribute) fd.append('item_attribute', JSON.stringify(item_attribute));
+                        if (productImageFile) fd.append('image', productImageFile, productImageFile.name);
+
+                        // Variant rasmlari alohida file sifatida yuboriladi
+                        variant_vIds.forEach(function(vId, idx) {
+                            if (variant_photos[idx]) {
+                                try {
+                                    var byteStr = atob(variant_photos[idx]);
+                                    var ab = new ArrayBuffer(byteStr.length);
+                                    var ia = new Uint8Array(ab);
+                                    for (var i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
+                                    var blob = new Blob([ab], { type: 'image/jpeg' });
+                                    fd.append('variant_image_' + vId, blob, 'variant_' + vId + '.jpg');
+                                } catch(e) {}
+                            }
+                        });
+
+                        $.ajax({
+                            url: '{{ route('items.sync') }}',
+                            type: 'POST',
+                            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+                            data: fd,
+                            processData: false,
+                            contentType: false,
+                            success: function(response) {
+                                if (response.success) {
+                                    var backendData = response.data || {};
+                                    var apiPhoto = backendData.image || backendData.photo || '';
+                                    // Firestore ga API dan kelgan URL bilan saqlash
+                                    database.collection('vendor_products').doc(id).set({
                                         'name': name,
                                         'price': parseFloat(price) || 0,
-                                        'quantity': parseInt(
-                                            item_quantity),
+                                        'quantity': parseInt(item_quantity),
                                         'disPrice': parseFloat(discount) || 0,
                                         'vendorID': vandorId,
                                         'categoryID': category,
                                         'brandID': brand,
-                                        'photo': photo,
-                                        'photos': IMG,
+                                        'photo': apiPhoto,
+                                        'photos': apiPhoto ? [apiPhoto] : [],
                                         'calories': itemCalories,
-                                        "grams": itemGrams,
+                                        'grams': itemGrams,
                                         'proteins': itemProteins,
                                         'fats': itemFats,
                                         'description': description,
@@ -837,93 +856,26 @@
                                         'item_attribute': item_attribute,
                                         'product_specification': product_specification,
                                         'isDigitalProduct': is_digital_product,
-                                        'digitalProduct': DigitalImg,
-                                        'createdAt': firebase.firestore.FieldValue.serverTimestamp() 
-                                    }).then(function(result) {
-                                        var fd = new FormData();
-                                        fd.append('name', name);
-                                        fd.append('price', price);
-                                        fd.append('quantity', parseInt(item_quantity));
-                                        fd.append('disPrice', discount);
-                                        fd.append('categoryID', category);
-                                        fd.append('brandID', brand);
-                                        fd.append('photo', photo);
-                                        fd.append('description', description);
-                                        fd.append('publish', itemPublish);
-                                        fd.append('section_id', section_id);
-                                        fd.append('id', id);
-                                        fd.append('vendorID', vandorId);
-                                        fd.append('calories', itemCalories || 0);
-                                        fd.append('grams', itemGrams || 0);
-                                        fd.append('proteins', itemProteins || 0);
-                                        fd.append('fats', itemFats || 0);
-                                        fd.append('nonveg', nonveg ? 'true' : 'false');
-                                        fd.append('veg', veg ? 'true' : 'false');
-                                        fd.append('takeawayOption', itemTakeaway ? 'true' : 'false');
-                                        fd.append('addOnsTitle', JSON.stringify(addOnesTitle));
-                                        fd.append('addOnsPrice', JSON.stringify(addOnesPrice));
-                                        fd.append('product_specification', JSON.stringify(product_specification));
-                                        if (attributes.length > 0) fd.append('attributes', JSON.stringify(attributes));
-                                        if (variants.length > 0) fd.append('variants', JSON.stringify(variants));
-                                        if (item_attribute) fd.append('item_attribute', JSON.stringify(item_attribute));
-                                        if (productImageFile) {
-                                            fd.append('image', productImageFile, productImageFile.name);
-                                        }
-                                        $.ajax({
-                                            url: '{{ route('items.sync') }}',
-                                            type: 'POST',
-                                            headers: {
-                                                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                                            },
-                                            data: fd,
-                                            processData: false,
-                                            contentType: false,
-                                            success: function(response) {
-                                                if (response.success) {
-                                                    var backendData = response.data || {};
-                                                    var backendPhoto = backendData.image || backendData.photo || '';
-                                                    if (backendPhoto) {
-                                                        database.collection('vendor_products').doc(id).update({
-                                                            'photo': backendPhoto,
-                                                            'photos': [backendPhoto]
-                                                        }).finally(function() {
-                                                            window.location.href = '{{ route('items') }}';
-                                                        });
-                                                    } else {
-                                                        window.location.href = '{{ route('items') }}';
-                                                    }
-                                                } else {
-                                                    jQuery("#data-table_processing").hide();
-                                                    $(".error_top").show().html("<p>" + response.message + "</p>");
-                                                    window.scrollTo(0, 0);
-                                                }
-                                            },
-                                            error: function(xhr) {
-                                                jQuery("#data-table_processing").hide();
-                                                var msg = "Error syncing with external API";
-                                                if (xhr.responseJSON && xhr.responseJSON.message) {
-                                                    msg = xhr.responseJSON.message;
-                                                }
-                                                $(".error_top").show().html("<p>" + msg + "</p>");
-                                                window.scrollTo(0, 0);
-                                            }
-                                        });
-
+                                        'createdAt': firebase.firestore.FieldValue.serverTimestamp()
+                                    }).then(function() {
+                                        window.location.href = '{{ route('items') }}';
+                                    }).catch(function(err) {
+                                        jQuery("#data-table_processing").hide();
+                                        $(".error_top").show().html("<p>Firestore xato: " + err.message + "</p>");
+                                        window.scrollTo(0, 0);
                                     });
-                            }).catch(err => {
+                                } else {
+                                    jQuery("#data-table_processing").hide();
+                                    $(".error_top").show().html("<p>" + response.message + "</p>");
+                                    window.scrollTo(0, 0);
+                                }
+                            },
+                            error: function(xhr) {
                                 jQuery("#data-table_processing").hide();
-                                $(".error_top").show();
-                                $(".error_top").html("");
-                                $(".error_top").append("<p>" + err +
-                                    "</p>");
+                                var msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : "storage.fondex.uz ga ulanishda xato";
+                                $(".error_top").show().html("<p>" + msg + "</p>");
                                 window.scrollTo(0, 0);
-                            });
-                        }).catch(err => {
-                            jQuery("#data-table_processing").hide();
-                            $(".error_top").show();
-                            $(".error_top").html("");
-                            $(".error_top").append("<p>" + err + "</p>");
-                            window.scrollTo(0, 0);
+                            }
                         });
                     }
                 } else {
