@@ -122,7 +122,7 @@
                                 <label class="col-3 control-label">{{ trans('lang.item_attribute_id') }}</label>
                                 <div class="col-7">
                                     <select id='item_attribute' class="form-control chosen-select" required
-                                        multiple="multiple" style="display: none;" onchange="selectAttribute();"></select>
+                                        multiple="multiple" style="display: none;"></select>
                                 </div>
                             </div>
 
@@ -130,8 +130,8 @@
                                 <div class="col-12 px-0 mb-2">
                                     <label class="control-label font-weight-bold">Atribut qiymatlari</label>
                                 </div>
-                                <div class="item_attributes" id="item_attributes"></div>
-                                <div class="item_variants" id="item_variants"></div>
+                                <div class="col-12 item_attributes" id="item_attributes"></div>
+                                <div class="col-12 item_variants" id="item_variants"></div>
                                 <input type="hidden" id="attributes" value="" />
                                 <input type="hidden" id="variants" value="" />
                             </div>
@@ -607,21 +607,20 @@
                 $("#item_attribute").show().chosen({
                     "placeholder_text": "{{ trans('lang.select_attribute') }}"
                 });
+                $("#item_attribute").on('change', function() {
+                    selectAttribute();
+                });
             });
 
-            database.collection('sections').doc(section_id).get().then(async function(snapshots) {
-                var data = snapshots.data();
-                if (data.serviceTypeFlag == "ecommerce-service" || data.serviceTypeFlag ==
-                    "delivery-service") {
-                    $("#attributes_div").show();
-                    $("#item_attribute_chosen").css({
-                        'width': '100%'
-                    });
-                } else {
-                    $("#attributes_div").remove();
-                    $("#attributes_div_values").remove();
-                }
-            });
+            if (section_flag == "ecommerce-service" || section_flag == "delivery-service") {
+                $("#attributes_div").show();
+                $("#item_attribute_chosen").css({
+                    'width': '100%'
+                });
+            } else {
+                $("#attributes_div").remove();
+                $("#attributes_div_values").remove();
+            }
 
             var digitalProductRef = database.collection('settings').doc(
                 "digitalProduct");
@@ -1155,18 +1154,23 @@
         function selectAttribute() {
             var html = '';
             $("#item_attribute").find('option:selected').each(function() {
-                html += '<div class="row">';
+                html += '<div class="row mb-2">';
                 html += '<div class="col-md-3">';
-                html += '<label>' + $(this).text() + '</label>';
+                html += '<label class="control-label">' + $(this).text() + '</label>';
                 html += '</div>';
-                html += '<div class="col-lg-9">';
+                html += '<div class="col-md-9">';
                 html += '<input type="text" class="form-control" id="attribute_options_' + $(this).val() +
-                    '" placeholder="Add attribute values" data-role="tagsinput" onchange="variants_update()">';
+                    '" placeholder="Add attribute values (Enter bilan ajrating)">';
                 html += '</div>';
                 html += '</div>';
             });
             $("#item_attributes").html(html);
-            $("#item_attributes input[data-role=tagsinput]").tagsinput();
+            $("#item_attributes input").each(function() {
+                $(this).tagsinput();
+                $(this).on('itemAdded itemRemoved', function() {
+                    variants_update();
+                });
+            });
             $("#attributes").val('');
             $("#variants").val('');
             $("#item_variants").html('');
