@@ -308,6 +308,13 @@
 
 
     <script>
+        // Prevent bfcache from restoring stale form data
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
+
         $(window).on('load', function() {
             console.log("DEBUG: Item Create Script Window Loaded.");
             initCreatePage();
@@ -633,7 +640,7 @@
 
             $(".create_item_btn").click(async function() {
                 if (parseInt(itemLimit) == -1 || parseInt(createdItem) < parseInt(itemLimit)) {
-                    var id = "<?php echo uniqid(); ?>";
+                    var id = uniqid();
                     var name = $(".item_name").val();
                     var price = $(".item_price").val();
                     var item_quantity = $(".item_quantity").val();
@@ -740,11 +747,12 @@
                         var attributes = [];
                         var variants = [];
 
-                        if ($('#attributes').val().length > 0) {
+                        if (($('#attributes').val() || '').length > 0) {
                             var attributes = $.parseJSON($('#attributes').val());
                         }
-                        if ($('#variants').val().length > 0) {
-                            var variantsSet = $.parseJSON($('#variants').val());
+                        var variantsRaw = $('#variants').val() || '';
+                        if (variantsRaw.length > 0) {
+                            var variantsSet = $.parseJSON(variantsRaw);
                             var isValid = false;
                             $.each(variantsSet, function(key, variant) {
                                 var variant_price = $('#price_' + variant).val();
@@ -1190,11 +1198,13 @@
                     html += '</tr>';
                     html += '</thead>';
                     html += '<tbody>';
+                    var mainPrice = parseFloat($(".item_price").val()) || 0;
                     $.each(variants, function(index, variant) {
                         html += '<tr>';
                         html += '<td><label for="" class="control-label">' + variant + '</label></td>';
                         html += '<td>';
-                        var check_variant_price = $('#price_' + variant).val() ? $('#price_' + variant).val() : 1;
+                        var existingPrice = $('#price_' + variant).val();
+                        var check_variant_price = existingPrice ? existingPrice : mainPrice;
                         html += '<input type="number" id="price_' + variant + '" value="' + check_variant_price +
                             '" min="0" class="form-control">';
                         html += '</td>';
