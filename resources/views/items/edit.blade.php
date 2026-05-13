@@ -889,8 +889,8 @@
                             variants.push({
                                 'variant_id': uniqid(),
                                 'variant_sku': variant,
-                                'variant_price': variant_price,
-                                'variant_quantity': $('#qty_' + variant).val(),
+                                'variant_price': parseFloat(variant_price),
+                                'variant_quantity': parseInt($('#qty_' + variant).val()) || -1,
                                 'variant_image': $('#variant_' + variant + '_url').val() || ''
                             });
                         });
@@ -960,12 +960,18 @@
                             if (response.success) {
                                 var backendData = response.data || {};
                                 var apiPhoto = backendData.image || backendData.photo || photo;
+                                var syncedBackendId = backendData.id || backendData.backend_id || backendId || null;
+                                var syncedPrice = parseFloat(backendData.price);
+                                var syncedDiscount = parseFloat(backendData.discount_price || backendData.disPrice);
+                                if (!syncedPrice || syncedPrice <= 0) syncedPrice = parseFloat(price) || 0;
+                                if (!syncedDiscount || syncedDiscount < 0) syncedDiscount = parseFloat(discount) || 0;
                                 // Firestore ga API dan kelgan URL bilan yangilash
                                 database.collection('vendor_products').doc(productId).set({
                                     'name': name,
-                                    'price': parseFloat(price) || 0,
+                                    'price': syncedPrice,
                                     'quantity': parseInt(item_quantity),
-                                    'disPrice': parseFloat(discount) || 0,
+                                    'disPrice': syncedDiscount,
+                                    'backend_id': syncedBackendId,
                                     'categoryID': category,
                                     'brandID': brand,
                                     'photo': apiPhoto,
@@ -1432,6 +1438,11 @@
                         var variant_qty = -1;
                         var variant_image = '';
                         var variant_image_url = '';
+                        // DOM da mavjud bo'lsa, foydalanuvchi kiritgan qiymatni saqlash
+                        var domPrice = parseFloat($('#price_' + variant).val());
+                        var domQty = $('#qty_' + variant).val();
+                        if (domPrice > 0) variant_price = domPrice;
+                        if (domQty !== '') variant_qty = parseInt(domQty);
                         if (item_attributeX) {
                             var normalizedVariant = variant.replace(/[^a-zA-Z0-9]/g, '');
                             var variant_info = $.map(item_attributeX.variants, function(v, i) {
@@ -1441,8 +1452,8 @@
                                 }
                             });
                             if (variant_info[0]) {
-                                variant_price = variant_info[0].variant_price || 0;
-                                variant_qty = variant_info[0].variant_quantity !== undefined ? variant_info[0].variant_quantity : -1;
+                                if (variant_price <= 0) variant_price = parseFloat(variant_info[0].variant_price) || 0;
+                                if (domQty === '') variant_qty = variant_info[0].variant_quantity !== undefined ? variant_info[0].variant_quantity : -1;
                                 if (variant_info[0].variant_image) {
                                     variant_image = '<img class="rounded" style="width:50px" src="' + variant_info[0].variant_image + '" alt="image" onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'"><i class="mdi mdi-delete" data-variant="' + variant + '"></i>';
                                     variant_image_url = variant_info[0].variant_image;

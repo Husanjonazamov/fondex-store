@@ -18,6 +18,49 @@ class IntegrationController extends Controller
         $this->middleware('auth');
     }
 
+    private function firstNumericValue(array $item, array $keys, float $default = 0): float
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $item) && $item[$key] !== null && $item[$key] !== '') {
+                return (float) $item[$key];
+            }
+        }
+
+        return $default;
+    }
+
+    private function normalizePrice(array $item): float
+    {
+        foreach ([
+            'price',
+            'product_price',
+            'regular_price',
+            'base_price',
+            'unit_price',
+            'amount',
+        ] as $key) {
+            if (array_key_exists($key, $item) && $item[$key] !== null && $item[$key] !== '') {
+                $value = (float) $item[$key];
+                if ($value > 0) {
+                    return $value;
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    private function normalizeDiscountPrice(array $item): float
+    {
+        return $this->firstNumericValue($item, [
+            'discount_price',
+            'disPrice',
+            'sale_price',
+            'offer_price',
+            'special_price',
+        ]);
+    }
+
     /**
      * Sync product to external API
      */
@@ -115,12 +158,22 @@ class IntegrationController extends Controller
             \Log::info('syncProduct backend response', ['status' => $guzzleResponse->getStatusCode(), 'body' => $rawBody]);
             $body = json_decode($rawBody, true);
 
+            $productData = $body['data'] ?? $body ?? [];
+            if (!is_array($productData)) {
+                $productData = [];
+            }
+
             $imageUrl = $body['image'] ?? $body['data']['image'] ?? null;
             if ($imageUrl) {
                 $imageUrl = str_replace('http://', 'https://', $imageUrl);
             }
 
-            return response()->json(['success' => true, 'data' => array_merge($body ?? [], ['image' => $imageUrl])]);
+            return response()->json(['success' => true, 'data' => array_merge($body ?? [], [
+                'id' => $productData['id'] ?? $body['id'] ?? null,
+                'price' => $this->normalizePrice($productData) ?: (float)($request->price ?? 0),
+                'discount_price' => $this->normalizeDiscountPrice($productData) ?: (float)($request->disPrice ?? 0),
+                'image' => $imageUrl,
+            ])]);
 
         } catch (\GuzzleHttp\Exception\ClientException $e) {
             $body = $e->getResponse()->getBody()->getContents();
@@ -221,8 +274,8 @@ class IntegrationController extends Controller
                     'id'             => ($item['firestore_id'] ?: null) ?? ($item['id'] ?? ''),
                     'backend_id'     => $item['id'] ?? null,
                     'name'           => $item['name'] ?? '',
-                    'price'          => (float)($item['price'] ?? 0),
-                    'disPrice'       => (float)($item['discount_price'] ?? 0),
+                    'price'          => $this->normalizePrice($item),
+                    'disPrice'       => $this->normalizeDiscountPrice($item),
                     'photo'          => !empty($item['image']) ? str_replace('http://', 'https://', $item['image']) : '',
                     'photos'         => $item['images'] ?? [],
                     'vendorID'       => $item['vendor'] ?? '',
@@ -280,8 +333,8 @@ class IntegrationController extends Controller
                 'id' => $item['firestore_id'] ?? '',
                 'backend_id' => $item['id'] ?? $id,
                 'name' => $item['name'] ?? '',
-                'price' => $item['price'] ?? 0,
-                'disPrice' => $item['discount_price'] ?? '0',
+                'price' => $this->normalizePrice($item),
+                'disPrice' => $this->normalizeDiscountPrice($item),
                 'photo' => !empty($item['image']) ? str_replace('http://', 'https://', $item['image']) : '',
                 'photos' => $item['images'] ?? [],
                 'vendorID' => $item['vendor'] ?? '',

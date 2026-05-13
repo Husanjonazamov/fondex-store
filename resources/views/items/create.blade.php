@@ -767,8 +767,8 @@
                                 variants.push({
                                     'variant_id': uniqid(),
                                     'variant_sku': variant,
-                                    'variant_price': variant_price,
-                                    'variant_quantity': $('#qty_' + variant).val(),
+                                    'variant_price': parseFloat(variant_price),
+                                    'variant_quantity': parseInt($('#qty_' + variant).val()) || -1,
                                     'variant_image': ''
                                 });
                             });
@@ -837,13 +837,19 @@
                                 if (response.success) {
                                     var backendData = response.data || {};
                                     var apiPhoto = backendData.image || backendData.photo || '';
+                                    var backendId = backendData.id || backendData.backend_id || null;
+                                    var syncedPrice = parseFloat(backendData.price);
+                                    var syncedDiscount = parseFloat(backendData.discount_price || backendData.disPrice);
+                                    if (!syncedPrice || syncedPrice <= 0) syncedPrice = parseFloat(price) || 0;
+                                    if (!syncedDiscount || syncedDiscount < 0) syncedDiscount = parseFloat(discount) || 0;
                                     // Firestore ga API dan kelgan URL bilan saqlash
                                     database.collection('vendor_products').doc(id).set({
                                         'name': name,
-                                        'price': parseFloat(price) || 0,
+                                        'price': syncedPrice,
                                         'quantity': parseInt(item_quantity),
-                                        'disPrice': parseFloat(discount) || 0,
+                                        'disPrice': syncedDiscount,
                                         'vendorID': vandorId,
+                                        'backend_id': backendId,
                                         'categoryID': category,
                                         'brandID': brand,
                                         'photo': apiPhoto,
