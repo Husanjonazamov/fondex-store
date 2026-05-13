@@ -141,14 +141,25 @@ class IntegrationController extends Controller
 
             $client = new \GuzzleHttp\Client(['verify' => false]);
 
-            // backend_id explicitly provided → PATCH (update), otherwise POST (create)
-            $backendId = $request->backend_id ?? null;
+            // backend_id bo'lmasa ham firestore_id bilan update qilib ko'ramiz.
+            // Service API product lookupni numeric id yoki firestore_id orqali topadi.
+            $backendId = $request->backend_id ?: ($request->id ?? null);
 
-            if (!empty($backendId)) {
-                $guzzleResponse = $client->patch($this->apiUrl . '/products/' . $backendId . '/', [
-                    'multipart' => $fields,
-                ]);
-            } else {
+            try {
+                if (!empty($backendId)) {
+                    $guzzleResponse = $client->patch($this->apiUrl . '/products/' . $backendId . '/', [
+                        'multipart' => $fields,
+                    ]);
+                } else {
+                    $guzzleResponse = $client->post($this->apiUrl . '/products/', [
+                        'multipart' => $fields,
+                    ]);
+                }
+            } catch (\GuzzleHttp\Exception\ClientException $e) {
+                if ($e->getResponse()->getStatusCode() !== 404 || $request->filled('backend_id')) {
+                    throw $e;
+                }
+
                 $guzzleResponse = $client->post($this->apiUrl . '/products/', [
                     'multipart' => $fields,
                 ]);
@@ -329,6 +340,30 @@ class IntegrationController extends Controller
                 }
             }
 
+            $variants = $item['variants'] ?? [];
+            if (is_array($variants)) {
+                $variants = array_values(array_filter($variants, function ($variant) {
+                    return is_array($variant) && !empty($variant['sku']);
+                }));
+            }
+
+            if (!is_array($itemAttribute) && is_array($variants) && count($variants) > 0) {
+                $firstVariant = $variants[0] ?? [];
+                $attributeData = is_array($firstVariant) ? ($firstVariant['attribute_data'] ?? []) : [];
+                $itemAttribute = [
+                    'attributes' => is_array($attributeData) ? $attributeData : [],
+                    'variants' => array_map(function ($variant) {
+                        return [
+                            'variant_id' => $variant['firestore_id'] ?? $variant['id'] ?? '',
+                            'variant_sku' => $variant['sku'] ?? '',
+                            'variant_price' => $variant['price'] ?? 0,
+                            'variant_quantity' => $variant['quantity'] ?? -1,
+                            'variant_image' => $variant['image'] ?? '',
+                        ];
+                    }, $variants),
+                ];
+            }
+
             $normalized = [
                 'id' => $item['firestore_id'] ?? '',
                 'backend_id' => $item['id'] ?? $id,
@@ -345,6 +380,7 @@ class IntegrationController extends Controller
                 'publish' => (bool) ($item['is_publish'] ?? false),
                 'quantity' => $item['quantity'] ?? 0,
                 'item_attribute' => is_array($itemAttribute) ? $itemAttribute : null,
+                'variants' => is_array($variants) ? $variants : [],
             ];
 
             return response()->json(['success' => true, 'data' => $normalized]);

@@ -351,6 +351,22 @@
         var allowed_file_size = '';
         var categories_list = [];
 
+        function variantDomKey(value) {
+            return 'v_' + encodeURIComponent(String(value || '').trim()).replace(/[^a-zA-Z0-9]/g, '_');
+        }
+
+        function parseMoneyValue(value) {
+            var normalized = String(value || '').trim().replace(/\s+/g, '');
+            if (normalized.indexOf(',') !== -1 && normalized.indexOf('.') === -1) {
+                normalized = normalized.replace(',', '.');
+            }
+            if (/^\d{1,3}([.,]\d{3})+$/.test(normalized)) {
+                normalized = normalized.replace(/[.,]/g, '');
+            }
+            var parsed = parseFloat(normalized);
+            return isNaN(parsed) ? 0 : parsed;
+        }
+
         function normalizeProductData(product, fallbackFirestoreId = '') {
             if (!product) {
                 return null;
@@ -369,6 +385,28 @@
             product.addOnsTitle = Array.isArray(product.addOnsTitle) ? product.addOnsTitle : [];
             product.addOnsPrice = Array.isArray(product.addOnsPrice) ? product.addOnsPrice : [];
             product.product_specification = product.product_specification || {};
+
+            if (Array.isArray(product.variants)) {
+                product.variants = product.variants.filter(function(variant) {
+                    return variant && (variant.sku || variant.variant_sku);
+                });
+            }
+
+            if (!product.item_attribute && Array.isArray(product.variants) && product.variants.length > 0) {
+                var firstAttributeData = product.variants[0].attribute_data || [];
+                product.item_attribute = {
+                    attributes: firstAttributeData,
+                    variants: product.variants.map(function(variant) {
+                        return {
+                            variant_id: variant.firestore_id || variant.id || '',
+                            variant_sku: variant.sku || '',
+                            variant_price: variant.price || 0,
+                            variant_quantity: variant.quantity !== undefined ? variant.quantity : -1,
+                            variant_image: variant.image || ''
+                        };
+                    })
+                };
+            }
 
             if (!product.photo && product.photos.length > 0) {
                 product.photo = product.photos[0];
@@ -879,19 +917,21 @@
                         var variantsSet = $.parseJSON(variantsRaw);
                         var isValid = false;
                         $.each(variantsSet, function(key, variant) {
-                            var variant_price = $('#price_' + variant).val();
-                            if (!variant_price || parseFloat(variant_price) <= 0) {
+                            var variantKey = variantDomKey(variant);
+                            var variant_price = parseMoneyValue($('#price_' + variantKey).val());
+                            if (!variant_price || variant_price <= 0) {
                                 $(".error_top").show().html("<p>{{ trans('lang.enter_positive_variant_price_error') }}</p>");
                                 window.scrollTo(0, 0);
                                 isValid = true;
                                 return false;
                             }
+                            var variant_id = $('#variant_' + variantKey + '_id').val() || uniqid();
                             variants.push({
-                                'variant_id': uniqid(),
+                                'variant_id': variant_id,
                                 'variant_sku': variant,
-                                'variant_price': parseFloat(variant_price),
-                                'variant_quantity': parseInt($('#qty_' + variant).val()) || -1,
-                                'variant_image': $('#variant_' + variant + '_url').val() || ''
+                                'variant_price': variant_price,
+                                'variant_quantity': parseInt($('#qty_' + variantKey).val()) || -1,
+                                'variant_image': $('#variant_' + variantKey + '_url').val() || ''
                             });
                         });
                         if (isValid) return;
@@ -1403,7 +1443,9 @@
                     if (attribute_options) {
                         var attribute_options = attribute_options.split(',');
                         attribute_options = $.map(attribute_options, function(value) {
-                            return value.replace(/[^a-zA-Z0-9]/g, '');
+                            return String(value || '').trim();
+                        }).filter(function(value) {
+                            return value !== '';
                         });
                         attributeSet.push(attribute_options);
                         attributes.push({
@@ -1434,29 +1476,36 @@
                     html += '<tbody id="variants_tbody">';
                     $.each(variants, function(index, variant) {
 
+                        var variantKey = variantDomKey(variant);
                         var variant_price = 0;
                         var variant_qty = -1;
                         var variant_image = '';
                         var variant_image_url = '';
+                        var variant_id = '';
                         // DOM da mavjud bo'lsa, foydalanuvchi kiritgan qiymatni saqlash
-                        var domPrice = parseFloat($('#price_' + variant).val());
-                        var domQty = $('#qty_' + variant).val();
+                        var domPrice = parseMoneyValue($('#price_' + variantKey).val());
+                        var domQty = $('#qty_' + variantKey).val();
+                        var domVariantId = $('#variant_' + variantKey + '_id').val();
                         if (domPrice > 0) variant_price = domPrice;
                         if (domQty !== '') variant_qty = parseInt(domQty);
+                        if (domVariantId) variant_id = domVariantId;
                         if (item_attributeX) {
                             var normalizedVariant = variant.replace(/[^a-zA-Z0-9]/g, '');
                             var variant_info = $.map(item_attributeX.variants, function(v, i) {
-                                var normalizedSku = v.variant_sku.replace(/[^a-zA-Z0-9]/g, '');
-                                if (normalizedSku == normalizedVariant || v.variant_sku == variant) {
+                                var variantSku = v.variant_sku || v.sku || '';
+                                var normalizedSku = variantSku.replace(/[^a-zA-Z0-9]/g, '');
+                                if (normalizedSku == normalizedVariant || variantSku == variant) {
                                     return v;
                                 }
                             });
                             if (variant_info[0]) {
-                                if (variant_price <= 0) variant_price = parseFloat(variant_info[0].variant_price) || 0;
-                                if (domQty === '') variant_qty = variant_info[0].variant_quantity !== undefined ? variant_info[0].variant_quantity : -1;
-                                if (variant_info[0].variant_image) {
-                                    variant_image = '<img class="rounded" style="width:50px" src="' + variant_info[0].variant_image + '" alt="image" onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'"><i class="mdi mdi-delete" data-variant="' + variant + '"></i>';
-                                    variant_image_url = variant_info[0].variant_image;
+                                if (!variant_id) variant_id = variant_info[0].variant_id || variant_info[0].firestore_id || variant_info[0].id || '';
+                                if (variant_price <= 0) variant_price = parseFloat(variant_info[0].variant_price || variant_info[0].price) || 0;
+                                if (domQty === '') variant_qty = variant_info[0].variant_quantity !== undefined ? variant_info[0].variant_quantity : (variant_info[0].quantity !== undefined ? variant_info[0].quantity : -1);
+                                var variantImage = variant_info[0].variant_image || variant_info[0].image || '';
+                                if (variantImage) {
+                                    variant_image = '<img class="rounded" style="width:50px" src="' + variantImage + '" alt="image" onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'"><i class="mdi mdi-delete" data-variant="' + variantKey + '"></i>';
+                                    variant_image_url = variantImage;
                                 }
                             }
                         }
@@ -1464,21 +1513,22 @@
                         html += '<tr>';
                         html += '<td><label for="" class="control-label">' + variant + '</label></td>';
                         html += '<td>';
-                        html += '<input type="number" id="price_' + variant + '" value="' + variant_price + '" min="0" class="form-control">';
+                        html += '<input type="text" inputmode="decimal" id="price_' + variantKey + '" value="' + variant_price + '" class="form-control">';
                         html += '</td>';
                         html += '<td>';
-                        html += '<input type="number" id="qty_' + variant + '" value="' + variant_qty + '" min="-1" class="form-control">';
+                        html += '<input type="number" id="qty_' + variantKey + '" value="' + variant_qty + '" min="-1" class="form-control">';
                         html += '</td>';
                         html += '<td>';
                         html += '<div class="variant-image">';
                         html += '<div class="upload">';
-                        html += '<div class="image" id="variant_' + variant + '_image">' + variant_image + '</div>';
-                        html += '<div class="icon"><i class="mdi mdi-cloud-upload" data-variant="' + variant + '"></i></div>';
+                        html += '<div class="image" id="variant_' + variantKey + '_image">' + variant_image + '</div>';
+                        html += '<div class="icon"><i class="mdi mdi-cloud-upload" data-variant="' + variantKey + '"></i></div>';
                         html += '</div>';
-                        html += '<div id="variant_' + variant + '_process"></div>';
+                        html += '<div id="variant_' + variantKey + '_process"></div>';
                         html += '<div class="input-file">';
-                        html += '<input type="file" id="file_' + variant + '" onChange="handleVariantFileSelect(event,\'' + variant + '\')" class="form-control" style="display:none;">';
-                        html += '<input type="hidden" id="variant_' + variant + '_url" value="' + variant_image_url + '">';
+                        html += '<input type="file" id="file_' + variantKey + '" onChange="handleVariantFileSelect(event,\'' + variantKey + '\')" class="form-control" style="display:none;">';
+                        html += '<input type="hidden" id="variant_' + variantKey + '_id" value="' + variant_id + '">';
+                        html += '<input type="hidden" id="variant_' + variantKey + '_url" value="' + variant_image_url + '">';
                         html += '</div>';
                         html += '</div>';
                         html += '</td>';

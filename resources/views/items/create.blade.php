@@ -353,6 +353,22 @@
         var currentCurrency = '';
         var currencyAtRight = false;
         var decimal_degits = 0;
+
+        function variantDomKey(value) {
+            return 'v_' + encodeURIComponent(String(value || '').trim()).replace(/[^a-zA-Z0-9]/g, '_');
+        }
+
+        function parseMoneyValue(value) {
+            var normalized = String(value || '').trim().replace(/\s+/g, '');
+            if (normalized.indexOf(',') !== -1 && normalized.indexOf('.') === -1) {
+                normalized = normalized.replace(',', '.');
+            }
+            if (/^\d{1,3}([.,]\d{3})+$/.test(normalized)) {
+                normalized = normalized.replace(/[.,]/g, '');
+            }
+            var parsed = parseFloat(normalized);
+            return isNaN(parsed) ? 0 : parsed;
+        }
         var categories_list=[];
         var subscriptionBusinessModel = database.collection('settings').doc("vendor");
         subscriptionBusinessModel.get().then(async function(snapshots) {
@@ -755,20 +771,21 @@
                             var variantsSet = $.parseJSON(variantsRaw);
                             var isValid = false;
                             $.each(variantsSet, function(key, variant) {
-                                var variant_price = $('#price_' + variant).val();
-                                if (!variant_price || parseFloat(variant_price) <= 0) {
+                                var variantKey = variantDomKey(variant);
+                                var variant_price = parseMoneyValue($('#price_' + variantKey).val());
+                                if (!variant_price || variant_price <= 0) {
                                     $(".error_top").show().html("<p>{{ trans('lang.enter_positive_variant_price_error') }}</p>");
                                     window.scrollTo(0, 0);
                                     isValid = true;
                                     return false;
                                 }
-                                var variantIndex = variant_vIds.indexOf(variant);
+                                var variantIndex = variant_vIds.indexOf(variantKey);
                                 // variant rasm storage.fondex.uz ga file sifatida yuboriladi
                                 variants.push({
                                     'variant_id': uniqid(),
                                     'variant_sku': variant,
-                                    'variant_price': parseFloat(variant_price),
-                                    'variant_quantity': parseInt($('#qty_' + variant).val()) || -1,
+                                    'variant_price': variant_price,
+                                    'variant_quantity': parseInt($('#qty_' + variantKey).val()) || -1,
                                     'variant_image': ''
                                 });
                             });
@@ -1176,7 +1193,9 @@
                     if (attribute_options) {
                         var attribute_options = attribute_options.split(',');
                         attribute_options = $.map(attribute_options, function(value) {
-                            return value.replace(/[^a-zA-Z0-9]/g, '');
+                            return String(value || '').trim();
+                        }).filter(function(value) {
+                            return value !== '';
                         });
                         attributeSet.push(attribute_options);
                         attributes.push({
@@ -1206,32 +1225,33 @@
                     html += '<tbody>';
                     var mainPrice = parseFloat($(".item_price").val()) || 0;
                     $.each(variants, function(index, variant) {
+                        var variantKey = variantDomKey(variant);
                         html += '<tr>';
                         html += '<td><label for="" class="control-label">' + variant + '</label></td>';
                         html += '<td>';
-                        var existingPrice = $('#price_' + variant).val();
+                        var existingPrice = $('#price_' + variantKey).val();
                         var check_variant_price = existingPrice ? existingPrice : mainPrice;
-                        html += '<input type="number" id="price_' + variant + '" value="' + check_variant_price +
-                            '" min="0" class="form-control">';
+                        html += '<input type="text" inputmode="decimal" id="price_' + variantKey + '" value="' + check_variant_price +
+                            '" class="form-control">';
                         html += '</td>';
                         html += '<td>';
-                        var check_variant_qty = $('#qty_' + variant).val() ? $('#qty_' + variant).val() : -1;
-                        html += '<input type="number" id="qty_' + variant + '" value="' + check_variant_qty +
+                        var check_variant_qty = $('#qty_' + variantKey).val() ? $('#qty_' + variantKey).val() : -1;
+                        html += '<input type="number" id="qty_' + variantKey + '" value="' + check_variant_qty +
                             '" min="-1" class="form-control">';
                         html += '</td>';
                         html += '<td>';
                         html += '<div class="variant-image">';
                         html += '<div class="upload">';
-                        html += '<div class="image" id="variant_' + variant + '_image"></div>';
-                        html += '<div class="icon"><i class="mdi mdi-cloud-upload" data-variant="' + variant +
+                        html += '<div class="image" id="variant_' + variantKey + '_image"></div>';
+                        html += '<div class="icon"><i class="mdi mdi-cloud-upload" data-variant="' + variantKey +
                             '"></i></div>';
                         html += '</div>';
-                        html += '<div id="variant_' + variant + '_process"></div>';
+                        html += '<div id="variant_' + variantKey + '_process"></div>';
                         html += '<div class="input-file">';
-                        html += '<input type="file" id="file_' + variant +
-                            '" onChange="handleVariantFileSelect(event,\'' + variant +
+                        html += '<input type="file" id="file_' + variantKey +
+                            '" onChange="handleVariantFileSelect(event,\'' + variantKey +
                             '\')" class="form-control" style="display:none;">';
-                        html += '<input type="hidden" id="variant_' + variant + '_url" value="">';
+                        html += '<input type="hidden" id="variant_' + variantKey + '_url" value="">';
                         html += '</div>';
                         html += '</div>';
                         html += '</td>';
